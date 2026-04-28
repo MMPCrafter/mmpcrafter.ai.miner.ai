@@ -13,34 +13,19 @@ import {
   ExternalLink,
   ChevronRight,
   Info,
-  LogOut,
-  Mail,
   Download,
-  CheckCircle2,
   AlertTriangle,
-  Paperclip,
-  Image as ImageIcon,
-  Play,
-  FileUp,
-  Github,
   History,
-  Key
+  Key,
+  CloudLightning,
+  Menu,
+  Paperclip,
+  FileUp,
+  Image as ImageIcon,
+  CheckCircle2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { minecraftChat, generateMinecraftContent, generateMinecraftSkinImage } from './lib/gemini';
-import { 
-  auth, 
-  signInWithGoogle, 
-  signInWithMicrosoft, 
-  signInWithGithub,
-  logout, 
-  syncUserProfile, 
-  db,
-  handleFirestoreError,
-  OperationType
-} from './lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, deleteDoc, writeBatch, onSnapshot } from 'firebase/firestore';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -48,7 +33,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type View = 'chat' | 'generator' | 'hub' | 'account' | 'history';
+type View = 'chat' | 'generator' | 'hub' | 'history';
 
 interface ChatMessage {
   id: string;
@@ -58,11 +43,10 @@ interface ChatMessage {
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
+  const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>(localStorage.getItem('gemini_custom_key') || '');
-  const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -74,34 +58,6 @@ export default function App() {
       window.removeEventListener('offline', handleStatusChange);
     };
   }, []);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u);
-        await syncUserProfile(u);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="h-screen w-full bg-forge-bg flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-forge-accent border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-minecraft text-forge-accent tracking-widest text-sm animate-pulse uppercase">Syncing Forge...</p>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Forge ချိတ်ဆက်နေသည်...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Allow unauthenticated users to use the app in guest mode
-  const isGuest = !user;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-forge-bg text-forge-text-primary">
@@ -167,16 +123,8 @@ export default function App() {
             active={activeView === 'hub'} 
             onClick={() => setActiveView('hub')}
             icon={<Globe size={24} />}
-            label="Resources"
-            myanmarLabel="အရင်းအမြစ်များ"
-            isOpen={isSidebarOpen}
-          />
-          <NavButton 
-            active={activeView === 'account'} 
-            onClick={() => setActiveView('account')}
-            icon={<UserIcon size={24} />}
-            label="Account"
-            myanmarLabel="အကောင့်"
+            label="Knowledge Hub"
+            myanmarLabel="ပညာပေးဗဟို"
             isOpen={isSidebarOpen}
           />
         </nav>
@@ -197,40 +145,6 @@ export default function App() {
           >
             <ChevronRight size={16} className={cn("transition-transform", isSidebarOpen && "rotate-180")} />
           </button>
-          
-          {!isGuest ? (
-            <button 
-              onClick={() => logout()}
-              className="p-2 hover:bg-red-500/10 rounded transition-colors text-red-500/50 hover:text-red-500"
-              title="Logout"
-            >
-              <LogOut size={20} />
-            </button>
-          ) : (
-            <button 
-              onClick={() => setActiveView('account')}
-              className="p-2 hover:bg-forge-accent/10 rounded transition-colors text-forge-accent/50 hover:text-forge-accent"
-              title="Login"
-            >
-              <UserIcon size={20} />
-            </button>
-          )}
-
-          <div className={cn(
-            "w-8 h-8 rounded overflow-hidden border border-forge-border shadow-inner",
-            isGuest ? "bg-forge-sidebar border-gray-700" : "bg-forge-input"
-          )}>
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="User" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-            ) : (
-              <div className={cn(
-                "w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600",
-                isGuest ? "bg-gray-800" : "bg-gradient-to-br from-[#795548] to-[#5D4037]"
-              )}>
-                {isGuest ? '?' : ''}
-              </div>
-            )}
-          </div>
         </div>
       </aside>
 
@@ -278,11 +192,24 @@ export default function App() {
 
         <section className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
-            {activeView === 'chat' && <ChatView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="chat" />}
-            {activeView === 'generator' && <GeneratorView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="gen" />}
-            {activeView === 'history' && <HistoryView user={user} setActiveView={setActiveView} key="history" />}
+            {activeView === 'chat' && (
+              <ChatView 
+                setActiveView={setActiveView} 
+                customApiKey={customApiKey} 
+                targetMessageId={targetMessageId}
+                onMessageFocused={() => setTargetMessageId(null)}
+                key="chat" 
+              />
+            )}
+            {activeView === 'generator' && <GeneratorView setActiveView={setActiveView} customApiKey={customApiKey} key="gen" />}
+            {activeView === 'history' && (
+              <HistoryView 
+                setActiveView={setActiveView} 
+                setTargetMessageId={setTargetMessageId} 
+                key="history" 
+              />
+            )}
             {activeView === 'hub' && <HubView key="hub" />}
-            {activeView === 'account' && <AccountView user={user} customApiKey={customApiKey} setCustomApiKey={setCustomApiKey} key="acc" />}
           </AnimatePresence>
         </section>
 
@@ -294,10 +221,6 @@ export default function App() {
               onSave={(newKey) => {
                 setCustomApiKey(newKey);
                 localStorage.setItem('gemini_custom_key', newKey);
-                // Also update firebase if user is logged in
-                if (user) {
-                  setDoc(doc(db, 'users', user.uid), { customApiKey: newKey }, { merge: true });
-                }
               }} 
             />
           )}
@@ -341,7 +264,12 @@ function NavButton({ active, onClick, icon, label, myanmarLabel, isOpen }: { act
   );
 }
 
-function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | null, setActiveView: (view: View) => void, customApiKey?: string }) {
+function ChatView({ setActiveView, customApiKey, targetMessageId, onMessageFocused }: { 
+  setActiveView: (view: View) => void, 
+  customApiKey?: string,
+  targetMessageId?: string | null,
+  onMessageFocused?: () => void
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -350,76 +278,52 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load chat history from Firestore with real-time sync
+  // Load local chat history
   useEffect(() => {
-    if (!user) {
-      setIsInitialLoading(false);
-      setMessages([{ id: '1', role: 'model', text: "Hello! I've analyzed your current session. You're exploring in Guest Mode. Need some help with crafting recipes or mob behavior patterns? (မြန်မာလိုလည်း ပြောနိုင်သည်)" }]);
-      return;
+    const localHistory = JSON.parse(localStorage.getItem('miner_ai_local_chats') || '[]');
+    if (localHistory.length === 0) {
+      setMessages([{ id: '1', role: 'model', text: "Hello! I'm your Minecraft AI Companion. Need some help with crafting recipes or mob behavior patterns? (မြန်မာလိုလည်း ပြောနိုင်သည်)" }]);
+    } else {
+      setMessages(localHistory);
     }
-    
-    const q = query(
-      collection(db, 'chats'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'asc'),
-      limit(100)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const history: ChatMessage[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        history.push({ id: doc.id, role: data.role, text: data.text });
-      });
-
-      if (history.length === 0) {
-        setMessages([{ id: '1', role: 'model', text: "Hello! I've analyzed your current session. You're exploring a new biome. Need some help with crafting recipes or mob behavior patterns?" }]);
-      } else {
-        setMessages(history);
-      }
-      setIsInitialLoading(false);
-    }, (err) => {
-      console.error("Chat history sync error:", err);
-      setIsInitialLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    setIsInitialLoading(false);
+  }, []);
 
   const handleClearHistory = async () => {
-    if (!user || !window.confirm("Clear all neural chat logs? / မှတ်တမ်းအားလုံးကို ဖြတ်ထုတ်မည်လား?")) return;
-    
-    try {
-      const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      const batch = writeBatch(db);
-      snapshot.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-    } catch (err) {
-      console.error("Failed to clear history:", err);
-    }
+    if (!window.confirm("Clear all neural chat logs? / မှတ်တမ်းအားလုံးကို ဖြတ်ထုတ်မည်လား?")) return;
+    localStorage.removeItem('miner_ai_local_chats');
+    setMessages([{ id: '1', role: 'model', text: "Local memory purged. System reset complete." }]);
   };
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && !targetMessageId) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, targetMessageId]);
+
+  useEffect(() => {
+    if (targetMessageId && messages.length > 0) {
+      // Small timeout to ensure DOM is ready after potential re-render
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`msg-${targetMessageId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-forge-accent/50', 'ring-offset-2', 'ring-offset-forge-bg', 'transition-all');
+          setTimeout(() => {
+            el.classList.remove('ring-2', 'ring-forge-accent/50', 'ring-offset-2', 'ring-offset-forge-bg');
+            onMessageFocused?.();
+          }, 3000);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [targetMessageId, messages, onMessageFocused]);
 
   const saveMessage = async (role: 'user' | 'model', text: string) => {
-    if (!user) return;
-    try {
-      await addDoc(collection(db, 'chats'), {
-        userId: user.uid,
-        role,
-        text,
-        createdAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Failed to save message to history:", err);
-    }
+    const localHistory = JSON.parse(localStorage.getItem('miner_ai_local_chats') || '[]');
+    const newMsg = { id: Date.now().toString(), role, text, createdAt: new Date().toISOString() };
+    localHistory.push(newMsg);
+    localStorage.setItem('miner_ai_local_chats', JSON.stringify(localHistory.slice(-100)));
   };
 
 
@@ -446,13 +350,9 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
     setMediaFile(null);
     setIsLoading(true);
 
-    // Only save to Firestore if user is present
-    if (user) {
-      await saveMessage('user', displayMsg);
-    } else {
-      // Local state fallback for guests
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMsg }]);
-    }
+    // Save to persistence
+    await saveMessage('user', displayMsg);
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMsg }]);
 
     try {
       const history = messages.map(m => ({
@@ -464,17 +364,11 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
       const response = await minecraftChat(prompt, history, customApiKey);
       const botText = response || 'Neural link severed. Attempting reconnect...';
       
-      if (user) {
-        await saveMessage('model', botText);
-      } else {
-        setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: botText }]);
-      }
+      await saveMessage('model', botText);
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: botText }]);
     } catch (err) {
       console.error(err);
       const errorMsg = "Connection error. Check your uplink (internet) and try again.";
-      if (user) {
-        // Optional: don't save errors to long-term history?
-      }
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: errorMsg }]);
     } finally {
       setIsLoading(false);
@@ -503,31 +397,24 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
             <div className="w-3 h-3 bg-forge-accent"></div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-forge-text-secondary">Companion Chat</h2>
           </div>
-          {user && (
-            <button 
-              onClick={handleClearHistory}
-              className="text-[9px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 transition-colors flex items-center gap-2"
-              title="Clear Memory"
-            >
-              <AlertTriangle size={12} />
-              <span className="hidden sm:inline">Purge Memory / ဖြတ်ထုတ်ရန်</span>
-            </button>
-          )}
+          <button 
+            onClick={handleClearHistory}
+            className="text-[9px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 transition-colors flex items-center gap-2"
+            title="Clear Memory"
+          >
+            <AlertTriangle size={12} />
+            <span className="hidden sm:inline">Purge Memory / ဖြတ်ထုတ်ရန်</span>
+          </button>
         </div>
         
         <div 
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-forge-border scrollbar-track-transparent"
         >
-          {!user && (
-            <div className="p-3 bg-forge-accent/5 border border-dashed border-forge-accent/30 rounded flex items-center justify-between mb-4">
-              <span className="text-[10px] text-forge-accent uppercase font-bold tracking-tighter">Guest Session Active / ဧည့်သည်အဖြစ်သုံးနေသည်</span>
-              <span className="text-[9px] text-gray-600 italic">No persistence</span>
-            </div>
-          )}
           {messages.map((msg) => (
             <div
               key={msg.id}
+              id={`msg-${msg.id}`}
               className={cn(
                 "flex flex-col max-w-[85%] animate-in fade-in slide-in-from-bottom-2 duration-300",
                 msg.role === 'user' ? "ml-auto items-end" : "items-start"
@@ -667,7 +554,7 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
   );
 }
 
-function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUser | null, setActiveView: (view: View) => void, customApiKey?: string }) {
+function GeneratorView({ setActiveView, customApiKey }: { setActiveView: (view: View) => void, customApiKey?: string }) {
   const [type, setType] = useState<'addon' | 'skin' | 'world' | 'mod'>('addon');
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -682,39 +569,25 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
   const generatorFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'creations'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCreations(history);
-    }, (err) => {
-      console.error("Creations snapshot error:", err);
-    });
-    return () => unsubscribe();
-  }, [user]);
+    const localCreations = JSON.parse(localStorage.getItem('miner_ai_local_creations') || '[]');
+    setCreations(localCreations.reverse());
+  }, []);
 
   const saveCreation = async (creationType: string, content: string, nameOverride?: string) => {
-    if (!user) return;
-    try {
-      const creationName = nameOverride || content.split('\n')[0].replace('#', '').trim() || `New ${creationType}`;
-      await addDoc(collection(db, 'creations'), {
-        userId: user.uid,
-        type: creationType,
-        name: creationName,
-        content: content,
-        createdAt: serverTimestamp(),
-        isPublic: true
-      });
-      setSaveStatus('success');
-    } catch (err) {
-      console.error(err);
-      setSaveStatus('error');
-    }
+    const creationName = nameOverride || content.split('\n')[0].replace('#', '').trim() || `New ${creationType}`;
+    
+    const localCreations = JSON.parse(localStorage.getItem('miner_ai_local_creations') || '[]');
+    const newItem = { 
+      id: Date.now().toString(), 
+      type: creationType, 
+      name: creationName, 
+      content, 
+      createdAt: new Date().toISOString() 
+    };
+    localCreations.push(newItem);
+    localStorage.setItem('miner_ai_local_creations', JSON.stringify(localCreations.slice(-20)));
+    setCreations(prev => [newItem, ...prev].slice(0, 20));
+    setSaveStatus('success');
   };
 
   const handleGenerate = async () => {
@@ -764,22 +637,11 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
   };
 
   const handleSave = async () => {
-    if (!result || !user || isSaving) return;
+    if (!result || isSaving) return;
     setIsSaving(true);
     try {
       const creationName = result.split('\n')[0].replace('#', '').trim() || `New ${type}`;
-      await addDoc(collection(db, 'creations'), {
-        userId: user.uid,
-        type,
-        name: creationName,
-        content: result,
-        createdAt: serverTimestamp(),
-        isPublic: true
-      });
-      setSaveStatus('success');
-    } catch (err) {
-      console.error(err);
-      setSaveStatus('error');
+      await saveCreation(type, result, creationName);
     } finally {
       setIsSaving(false);
     }
@@ -819,21 +681,7 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
           <button onClick={() => setShowHistory(false)}><X size={14} className="text-gray-500" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {!user ? (
-            <div className="flex flex-col items-center gap-4 text-center mt-10">
-              <History size={32} className="text-gray-800" />
-              <p className="text-[10px] text-gray-600 font-bold uppercase leading-relaxed px-4">
-                Login Required for History Persistence.<br/>
-                မှတ်တမ်းများသိမ်းဆည်းရန် အကောင့်ဝင်ပါ။
-              </p>
-              <button 
-                onClick={() => setActiveView('account')}
-                className="forge-btn text-[9px] px-4 py-2 border-forge-accent/30 text-forge-accent"
-              >
-                Sign In
-              </button>
-            </div>
-          ) : creations.length === 0 ? (
+          {creations.length === 0 ? (
             <div className="text-[10px] text-gray-700 font-mono italic text-center mt-10">NO ENTRIES FOUND</div>
           ) : (
             creations.map((item) => (
@@ -845,7 +693,7 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
                 <div className="flex justify-between items-start mb-1">
                   <span className="text-[9px] font-bold text-forge-accent uppercase tracking-tighter">{item.type}</span>
                   <span className="text-[8px] text-gray-600 font-mono">
-                    {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Pending'}
+                    {new Date(item.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <p className="text-[11px] font-bold text-gray-400 truncate group-hover:text-white transition-colors">{item.name}</p>
@@ -866,25 +714,7 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
           </button>
         )}
 
-        {!user && (
-          <div className="mb-4 p-3 bg-forge-accent/5 border border-forge-accent/20 rounded flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-forge-accent/10 flex items-center justify-center">
-                <Info size={16} className="text-forge-accent" />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-white uppercase tracking-widest">Guest Mode Active</p>
-                <p className="text-[9px] text-gray-500">Creations will not be stored in neural history. / ဖန်တီးမှုများမှတ်တမ်းတင်မည်မဟုတ်ပါ။</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => setActiveView('account')}
-              className="text-[9px] font-bold text-forge-accent uppercase hover:underline"
-            >
-              Sign In to Store Data
-            </button>
-          </div>
-        )}
+
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
@@ -1057,9 +887,31 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
 
 function HubView() {
   const resources = [
-    { name: "Official Wiki", desc: "Mechanical Database", url: "https://minecraft.wiki" },
-    { name: "Planet Hub", desc: "Asset Repository", url: "https://planetminecraft.com" },
-    { name: "Curse Console", desc: "Modular Environment", url: "https://curseforge.com/minecraft" }
+    { name: "Official Wiki", desc: "Mechanical Database", url: "https://minecraft.wiki", category: "Core" },
+    { name: "Planet Hub", desc: "Asset Repository", url: "https://planetminecraft.com", category: "Community" },
+    { name: "Education Edition", desc: "Classroom Learning", url: "https://education.minecraft.net", category: "Education" },
+    { name: "Server Connection", desc: "Multiplayer Guide", url: "https://help.minecraft.net/hc/en-us/articles/4410316619533-Minecraft-Multiplayer-Connection-Issues-FAQ", category: "Guides" }
+  ];
+
+  const educationModules = [
+    { 
+      title: "Redstone Fundamentals", 
+      desc: "Learn logic gates, clock circuits, and automation components. The electricity of Minecraft.",
+      level: "Intermediate",
+      tags: ["Logic", "Engineering"]
+    },
+    { 
+      title: "Command Block Mastery", 
+      desc: "Use syntax to manipulate the game world, create custom events, and scripted sequences.",
+      level: "Advanced",
+      tags: ["Coding", "Automation"]
+    },
+    { 
+      title: "Ecology & Biomes", 
+      desc: "Understand entity spawning, climate mechanics, and resource distribution across dimensions.",
+      level: "Beginner",
+      tags: ["Biology", "Geology"]
+    }
   ];
 
   return (
@@ -1067,59 +919,106 @@ function HubView() {
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 1.02 }}
-      className="flex flex-col h-full p-4 sm:p-10 max-w-5xl mx-auto w-full overflow-y-auto"
+      className="flex flex-col h-full p-4 sm:p-6 lg:p-10 max-w-6xl mx-auto w-full overflow-y-auto custom-scrollbar"
     >
-      <div className="grid md:grid-cols-3 gap-6 mb-10">
+      <header className="mb-10">
+        <h2 className="text-2xl font-black uppercase tracking-[0.2em] text-white flex items-center gap-3">
+          Knowledge Base
+          <span className="text-[10px] bg-forge-accent/20 text-forge-accent px-2 py-0.5 rounded border border-forge-accent/30">Educational Protocol</span>
+        </h2>
+        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Expanding your blocky intellect / ဗဟုသုတများ တိုးပွားစေရန်</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         {resources.map((res) => (
           <a 
             key={res.name}
             href={res.url}
             target="_blank"
             rel="noreferrer"
-            className="forge-card p-6 group hover:border-forge-accent transition-all hover:-translate-y-1 block"
+            className="forge-card p-5 group hover:border-forge-accent transition-all hover:-translate-y-1 block relative overflow-hidden"
           >
-            <div className="flex items-center justify-between mb-4">
-              <Globe className="text-gray-500 group-hover:text-forge-accent" size={24} />
-              <ExternalLink size={14} className="text-gray-700" />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-forge-bg border border-forge-border rounded text-gray-400 group-hover:text-forge-accent transition-colors">{res.category}</span>
+              <ExternalLink size={12} className="text-gray-700" />
             </div>
-            <h3 className="text-sm font-bold uppercase tracking-widest text-forge-text-primary mb-1">{res.name}</h3>
-            <p className="text-[10px] text-gray-600 font-mono italic">{res.desc}</p>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-forge-text-primary mb-1 relative z-10">{res.name}</h3>
+            <p className="text-[10px] text-gray-600 font-mono italic relative z-10">{res.desc}</p>
+            <div className="absolute bottom-0 right-0 p-2 opacity-5">
+              <Globe size={40} className="text-white" />
+            </div>
           </a>
         ))}
       </div>
 
-      <div className="forge-card flex-1 flex flex-col">
-        <div className="p-4 border-b border-forge-border bg-forge-header/50 flex justify-between items-center">
-          <h3 className="text-xs font-bold uppercase tracking-widest">Global Terminal Guides / လမ်းညွှန်ချက်များ</h3>
-          <span className="text-[10px] text-gray-600 font-mono italic">3 ACTIVE PATCHES</span>
-        </div>
-        <div className="flex-1 p-0 flex divide-x divide-forge-border overflow-hidden">
-          <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-            {['Redstone Logic', 'Speedrun Optimization', 'Architectural Theory'].map((guide, idx) => (
-              <div key={guide} className="group cursor-pointer">
-                <div className="flex items-center gap-4 mb-2">
-                  <span className="text-[10px] font-mono text-forge-accent">0{idx + 1}</span>
-                  <h4 className="text-sm font-bold uppercase tracking-wide group-hover:text-forge-accent transition-colors">{guide}</h4>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed pl-8">Analyzing complex systems within the voxel environment to optimize throughput and structural integrity.</p>
-                <div className="pl-8 mt-2 flex items-center gap-2">
-                  <div className="h-[1px] flex-1 bg-forge-border"></div>
-                  <span className="text-[9px] font-bold text-gray-600 uppercase">Read_More</span>
-                  <ChevronRight size={10} className="text-gray-600" />
-                </div>
+      <div className="grid lg:grid-cols-3 gap-6 mb-10">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="forge-card flex flex-col">
+            <div className="p-4 border-b border-forge-border bg-forge-header/50 flex justify-between items-center">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-forge-text-secondary">Educational Modules / သင်ခန်းစာများ</h3>
+              <div className="flex gap-1">
+                {[1, 2, 3].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full bg-forge-accent/40"></div>)}
               </div>
-            ))}
-          </div>
-          <div className="hidden lg:flex w-72 bg-forge-sidebar/30 p-6 flex-col justify-between italic text-gray-600 text-xs leading-relaxed">
-            <div>
-              <Info size={20} className="mb-4 text-forge-accent" />
-              <p>"The forge serves as your gateway to the blocky void. Use the Companion to decode history and the Creator to build the future."</p>
             </div>
-            <div className="p-4 border border-forge-border bg-forge-bg text-center">
-              <span className="text-[10px] font-bold uppercase tracking-widest block mb-2">Network Status</span>
-              <div className="flex gap-1 justify-center">
-                {[1, 2, 3, 4, 5].map(i => <div key={i} className="w-1 h-3 bg-forge-accent"></div>)}
+            <div className="p-0 divide-y divide-forge-border">
+              {educationModules.map((module, idx) => (
+                <div key={module.title} className="p-6 hover:bg-forge-input/30 transition-colors group cursor-pointer">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-mono text-forge-accent bg-forge-accent/10 px-2 py-0.5 rounded border border-forge-accent/20">MODULE_0{idx + 1}</span>
+                      <h4 className="text-sm font-bold uppercase tracking-tight group-hover:text-forge-accent transition-colors">{module.title}</h4>
+                    </div>
+                    <span className="text-[9px] font-bold text-gray-600 uppercase border border-forge-border px-2 py-0.5 rounded">{module.level}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed max-w-2xl mb-4">{module.desc}</p>
+                  <div className="flex items-center gap-3">
+                    {module.tags.map(tag => (
+                      <span key={tag} className="text-[9px] font-mono text-gray-700 bg-forge-bg px-2 py-0.5 rounded">#{tag}</span>
+                    ))}
+                    <div className="flex-1"></div>
+                    <button className="flex items-center gap-2 text-[10px] font-black text-forge-accent group-hover:translate-x-1 transition-transform">
+                      ACCESS_NODE <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="forge-card p-6 bg-forge-accent/5 border-forge-accent/20 relative overflow-hidden">
+            <CloudLightning className="absolute -top-4 -right-4 text-forge-accent opacity-10" size={100} />
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-forge-accent mb-4">Did You Know? / သိကောင်းစရာ</h3>
+            <div className="space-y-4 relative z-10">
+              <p className="text-xs text-gray-400 leading-relaxed italic">
+                "Minecraft was originally called 'Cave Game' and was created in just six days."
+              </p>
+              <div className="h-[1px] bg-forge-accent/20 w-12"></div>
+              <p className="text-xs text-gray-400 leading-relaxed italic">
+                "Endermen speak English in reverse and at a much lower, distorted frequency."
+              </p>
+              <div className="h-[1px] bg-forge-accent/20 w-12"></div>
+              <p className="text-xs text-gray-400 leading-relaxed italic">
+                "Redstone can be used to build working computers, including basic CPUs and storage."
+              </p>
+            </div>
+          </div>
+
+          <div className="forge-card p-6 bg-forge-sidebar/50">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white mb-4">Connection Protocol</h3>
+            <div className="space-y-3">
+              <div className="p-3 bg-forge-bg border border-forge-border rounded text-[10px] group hover:border-forge-accent transition-colors">
+                <p className="text-gray-500 font-bold uppercase mb-1">Local Network</p>
+                <p className="text-white font-mono">192.168.1.XX:25565</p>
               </div>
+              <div className="p-3 bg-forge-bg border border-forge-border rounded text-[10px] group hover:border-forge-accent transition-colors">
+                <p className="text-gray-500 font-bold uppercase mb-1">Global Uplink</p>
+                <p className="text-white font-mono truncate">connect.miner-ai-forge.net</p>
+              </div>
+              <button className="w-full py-2 bg-forge-accent/10 border border-forge-accent/40 text-forge-accent text-[9px] font-black uppercase tracking-widest hover:bg-forge-accent hover:text-white transition-all">
+                Test Signal Stability
+              </button>
             </div>
           </div>
         </div>
@@ -1128,136 +1027,7 @@ function HubView() {
   );
 }
 
-function LoginView({ inline = false }: { inline?: boolean }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSocialLogin = async (provider: 'google' | 'microsoft' | 'github') => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      if (provider === 'google') await signInWithGoogle();
-      else if (provider === 'microsoft') await signInWithMicrosoft();
-      else await signInWithGithub();
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/popup-blocked') {
-        setError("Popup blocked! Please allow popups for this site. / Popup ကို ပိတ်ထားသည်။ ခွင့်ပြုပေးပါ။");
-      } else if (err.code === 'auth/cancelled-by-user') {
-        setError("Login cancelled. / အကောင့်ဝင်ခြင်းကို ဖျက်သိမ်းလိုက်သည်။");
-      } else {
-        setError(`Connection failed [${err.code || 'unknown'}]. Please try again. / ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်ကြိုးစားကြည့်ပါ။`);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const content = (
-    <div className={cn("forge-card w-full p-6 md:p-8 flex flex-col items-center gap-6", !inline && "max-w-md shadow-2xl")}>
-      <div className="w-16 h-16 md:w-20 md:h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
-        <Pickaxe className="text-white" size={window.innerWidth < 768 ? 32 : 48} />
-      </div>
-      
-      <div className="text-center space-y-2">
-        <h1 className="text-2xl md:text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
-        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI Forge</p>
-        <p className="text-[10px] text-forge-accent/70 font-bold uppercase tracking-widest">မြန်မာဘာသာဖြင့် အသုံးပြုနိုင်သည်</p>
-      </div>
-
-      {error && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs font-medium text-center"
-        >
-          <AlertTriangle className="inline-block mr-2" size={14} />
-          {error}
-        </motion.div>
-      )}
-
-      <div className="w-full space-y-4">
-        <div className="space-y-1">
-          <p className="text-[10px] text-gray-400 font-bold uppercase text-center mb-4 leading-relaxed">
-            Sign in with your social account to start creating.<br/>
-            အကောင့်ဖွင့်ရန် အောက်ပါ ခလုတ်များကို နှိပ်ပါ။
-          </p>
-          <button 
-            onClick={() => handleSocialLogin('google')}
-            disabled={isSubmitting}
-            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-          >
-            <div className="flex items-center gap-4">
-              <Globe size={20} className="text-blue-500" />
-              <div className="text-left">
-                <div className="font-bold text-white leading-none">Google Account</div>
-                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Google ဖြင့် အကောင့်ဝင်မည်</div>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-          </button>
-          
-          <button 
-            onClick={() => handleSocialLogin('microsoft')}
-            disabled={isSubmitting}
-            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-          >
-            <div className="flex items-center gap-4">
-              <Pickaxe size={20} className="text-orange-500" />
-              <div className="text-left">
-                <div className="font-bold text-white leading-none">Microsoft Account</div>
-                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Microsoft ဖြင့် အကောင့်ဝင်မည်</div>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-          </button>
-
-          <button 
-            onClick={() => handleSocialLogin('github')}
-            disabled={isSubmitting}
-            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-          >
-            <div className="flex items-center gap-4">
-              <Github size={20} className="text-white" />
-              <div className="text-left">
-                <div className="font-bold text-white leading-none">GitHub Account</div>
-                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">GitHub ဖြင့် အကောင့်ဝင်မည်</div>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4 py-2">
-          <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
-          <span className="text-[10px] text-gray-700 font-bold uppercase">System Info</span>
-          <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
-        </div>
-
-        <div className="p-4 bg-forge-sidebar/30 border border-forge-border rounded space-y-3">
-           <div className="flex items-start gap-3">
-              <Info size={16} className="text-forge-accent mt-0.5 shrink-0" />
-              <div className="text-[11px] leading-relaxed text-gray-400">
-                <span className="text-white font-bold">Account Opening:</span> Login with Google, Microsoft, or GitHub. No complex forms required.
-              </div>
-           </div>
-        </div>
-      </div>
-
-      <p className="text-[10px] text-gray-700 font-mono text-center max-w-[280px]">
-        By connecting your neural link, you agree to the Automated Asset Generation Protocols.
-      </p>
-    </div>
-  );
-
-  if (inline) return content;
-
-  return (
-    <div className="h-screen w-full bg-forge-bg flex items-center justify-center p-4">
-      {content}
-    </div>
-  );
-}
 
 function SystemMonitor() {
   return (
@@ -1387,67 +1157,26 @@ function SettingsModal({ onClose, apiKey, onSave }: { onClose: () => void, apiKe
   );
 }
 
-function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
+function HistoryView({ setActiveView, setTargetMessageId }: { setActiveView: (view: View) => void, setTargetMessageId: (id: string) => void }) {
   const [activeTab, setActiveTab] = useState<'chats' | 'creations'>('chats');
   const [chats, setChats] = useState<any[]>([]);
   const [creations, setCreations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
     const fetchData = async () => {
       setLoading(true);
-      try {
-        // Fetch Chats
-        const chatQuery = query(
-          collection(db, 'chats'),
-          where('userId', '==', user.uid),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
-        const chatSnap = await getDocs(chatQuery);
-        setChats(chatSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-        // Fetch Creations
-        const creationQuery = query(
-          collection(db, 'creations'),
-          where('userId', '==', user.uid),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
-        const creationSnap = await getDocs(creationQuery);
-        setCreations(creationSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error("History fetch error:", err);
-      } finally {
-        setLoading(false);
-      }
+      // Fetch from Local Storage
+      const localChats = JSON.parse(localStorage.getItem('miner_ai_local_chats') || '[]');
+      setChats([...localChats].reverse());
+      
+      const localCreations = JSON.parse(localStorage.getItem('miner_ai_local_creations') || '[]');
+      setCreations([...localCreations].reverse());
+      setLoading(false);
     };
 
     fetchData();
-  }, [user]);
-
-  if (!user) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 bg-forge-input border border-forge-border rounded-full flex items-center justify-center mb-6">
-          <History size={40} className="text-gray-700" />
-        </div>
-        <h2 className="text-xl font-black uppercase tracking-widest text-white mb-2">Neural History Locked / မှတ်တမ်းကိုပိတ်ထားသည်</h2>
-        <p className="text-xs text-gray-500 max-w-sm mb-6 uppercase font-bold tracking-tighter">Please synchronize your identity to access past cognitive logs and forged assets.</p>
-        <button 
-          onClick={() => setActiveView('account')}
-          className="forge-btn text-forge-accent border-forge-accent/20 px-8 py-3 hover:bg-forge-accent hover:text-white"
-        >
-          Sign In
-        </button>
-      </div>
-    );
-  }
+  }, []);
 
   return (
     <motion.div 
@@ -1455,12 +1184,17 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto w-full h-full flex flex-col p-4 sm:p-6 lg:p-10"
     >
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-white">Neural History</h1>
-          <p className="text-[10px] text-forge-accent font-bold uppercase tracking-widest">Accessing Archived Memory Banks / ယခင်မှတ်တမ်းများ</p>
+          <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-white flex items-center gap-3">
+            Neural History 
+            <span className="text-[8px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded border border-orange-500/30">Local Memory</span>
+          </h1>
+          <p className="text-[10px] text-forge-accent font-bold uppercase tracking-widest">
+            Browsing Temporary Ghost Logs / ယာယီမှတ်တမ်း
+          </p>
         </div>
-        <div className="flex bg-forge-input p-1 rounded-sm border border-forge-border">
+        <div className="flex bg-forge-input p-1 rounded-sm border border-forge-border self-start sm:self-center">
           <button 
             onClick={() => setActiveTab('chats')}
             className={cn(
@@ -1483,6 +1217,23 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+        {chats.length > 0 && activeTab === 'chats' && (
+          <div className="p-3 bg-orange-500/5 border border-orange-500/20 rounded-sm flex items-center justify-between shadow-inner">
+            <span className="text-[9px] text-orange-400 font-bold uppercase">Note: These logs are stored in your browser only. / ဤမှတ်တမ်းများသည် သင့်လှည့်လည်ကိရိယာတွင်သာ ရှိသည်။</span>
+            <button 
+              onClick={() => {
+                if(window.confirm("Purge local chat cache? / ယာယီမှတ်တမ်းများကို ဖျက်မည်လား?")) {
+                  localStorage.removeItem('miner_ai_local_chats');
+                  setChats([]);
+                }
+              }}
+              className="text-[9px] font-black text-orange-400 hover:text-orange-300 uppercase border-b border-orange-400/30"
+            >
+              PURGE_LOCAL
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="h-full flex items-center justify-center font-mono text-[10px] text-forge-accent animate-pulse">
             DECRYPTING_ARCHIVES...
@@ -1494,7 +1245,14 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
             </div>
           ) : (
             chats.map(msg => (
-              <div key={msg.id} className="forge-card p-4 border-l-2 border-l-forge-accent/40 hover:border-l-forge-accent transition-all">
+              <div 
+                key={msg.id} 
+                onClick={() => {
+                  setTargetMessageId(msg.id);
+                  setActiveView('chat');
+                }}
+                className="forge-card p-4 border-l-2 border-l-forge-accent/40 hover:border-l-forge-accent transition-all cursor-pointer hover:bg-forge-input/50 group"
+              >
                 <div className="flex justify-between items-center mb-2">
                   <span className={cn(
                     "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded",
@@ -1502,9 +1260,12 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
                   )}>
                     {msg.role === 'user' ? 'Internal Prompt' : 'Neural Response'}
                   </span>
-                  <span className="text-[9px] text-gray-600 font-mono">
-                    {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleString() : 'Recent'}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-gray-600 font-mono">
+                      {new Date(msg.createdAt).toLocaleString()}
+                    </span>
+                    <ChevronRight size={12} className="text-gray-700 group-hover:text-forge-accent transition-colors" />
+                  </div>
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed max-h-20 overflow-hidden line-clamp-3">{msg.text}</p>
               </div>
@@ -1531,14 +1292,14 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
                   <h3 className="text-sm font-bold text-white mb-2 group-hover:text-forge-accent transition-colors">{item.name}</h3>
                   <div className="flex justify-between items-center pt-3 border-t border-forge-border mt-auto">
                     <span className="text-[9px] text-gray-600">
-                      {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Syncing'}
+                      {new Date(item.createdAt).toLocaleDateString()}
                     </span>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         // Handle re-download or view logic
                       }}
-                      className="text-[9px] font-bold text-white hover:text-forge-accent"
+                      className="text-[9px] font-black text-white hover:text-forge-accent"
                     >
                       OPEN_MANIFEST
                     </button>
@@ -1553,232 +1314,4 @@ function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setAc
   );
 }
 
-function AccountView({ user, customApiKey, setCustomApiKey }: { user: FirebaseUser | null, customApiKey: string, setCustomApiKey: (key: string) => void }) {
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [clearing, setClearing] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(customApiKey);
-  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    const fetchProfile = async () => {
-      try {
-        const uDoc = await getDoc(doc(db, 'users', user.uid));
-        if (uDoc.exists()) {
-          const data = uDoc.data();
-          setProfile(data);
-          if (data.customApiKey && !localStorage.getItem('gemini_custom_key')) {
-            setCustomApiKey(data.customApiKey);
-            setApiKeyInput(data.customApiKey);
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, [user]);
-
-  const saveSettings = async () => {
-    setIsSavingSettings(true);
-    try {
-      localStorage.setItem('gemini_custom_key', apiKeyInput);
-      setCustomApiKey(apiKeyInput);
-      
-      if (user) {
-        await setDoc(doc(db, 'users', user.uid), {
-          customApiKey: apiKeyInput,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      }
-      alert("Settings updated successfully. / စနစ်သတ်မှတ်ချက်များ ပြုပြင်ပြီးပါပြီ။");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save settings.");
-    } finally {
-      setIsSavingSettings(false);
-    }
-  };
-
-  const clearCreationLogs = async () => {
-    if (!user || clearing) return;
-    if (!confirm("Are you sure you want to delete all generated creations history? This cannot be undone.")) return;
-    
-    setClearing(true);
-    try {
-      const q = query(collection(db, 'creations'), where('userId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      const batch = writeBatch(db);
-      snapshot.forEach(d => batch.delete(d.ref));
-      await batch.commit();
-      alert("Creation logs purged successfully.");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to purge creations history.");
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  const clearChatLogs = async () => {
-    if (!user || clearing) return;
-    if (!confirm("Are you sure you want to delete all chat history? This cannot be undone.")) return;
-    
-    setClearing(true);
-    try {
-      const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      const batch = writeBatch(db);
-      snapshot.forEach(d => batch.delete(d.ref));
-      await batch.commit();
-      alert("Neural chat logs purged successfully.");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to purge logs.");
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  if (loading) return <div className="p-10 text-center opacity-50 animate-pulse font-mono text-xs text-forge-accent">Accessing Profile Data... / ကိုယ်ရေးအချက်အလက်များကို ရယူနေသည်...</div>;
-
-  if (!user) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="max-w-md w-full space-y-8 text-center">
-           <div className="w-20 h-20 bg-gray-800 rounded-full mx-auto flex items-center justify-center border border-forge-border">
-              <UserIcon size={40} className="text-gray-600" />
-           </div>
-           <div>
-              <h2 className="text-xl font-bold uppercase tracking-widest text-forge-text-primary mb-2">Guest Access / ဧည့်သည်အဖြစ်ဝင်ရောက်ထားသည်</h2>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Connect your account to save your creations, access your history, and join the community hub.
-                <br/>
-                သင့်ဖန်တီးမှုများကို သိမ်းဆည်းရန်နှင့် မှတ်တမ်းများကြည့်ရန် အကောင့်ဝင်ပါ။
-              </p>
-           </div>
-           <LoginView inline />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="max-w-4xl mx-auto p-4 sm:p-10 w-full overflow-y-auto"
-    >
-      <div className="forge-card p-4 sm:p-10 flex flex-col md:flex-row gap-8 lg:gap-10">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-32 h-32 rounded bg-forge-input border-2 border-forge-accent p-1 shadow-2xl overflow-hidden">
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="Avatar" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-forge-border flex items-center justify-center">
-                <UserIcon size={48} className="text-forge-accent" />
-              </div>
-            )}
-          </div>
-          <span className="text-[10px] text-forge-accent font-mono border border-forge-accent px-2 py-0.5 rounded tracking-tighter">UUID: {user?.uid.slice(0, 12)}...</span>
-        </div>
-
-        <div className="flex-1 space-y-8">
-          <section>
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-forge-text-secondary mb-4 flex items-center gap-2">
-              <UserIcon size={14} /> Profile Credentials
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-600 uppercase">Display Name</label>
-                <div className="bg-forge-input border border-forge-border p-3 text-sm font-semibold text-forge-text-primary">{user?.displayName || 'Anonymous Crafter'}</div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-600 uppercase">Primary Email</label>
-                <div className="bg-forge-input border border-forge-border p-3 text-sm font-semibold text-forge-text-primary">{user?.email}</div>
-              </div>
-            </div>
-          </section>
-
-          <SystemMonitor />
-
-          <section>
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-forge-text-secondary mb-4 flex items-center gap-2">
-              <Settings size={14} /> System Protocols
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-forge-input/50 border border-forge-border rounded group hover:border-forge-accent transition-colors">
-                <div>
-                  <p className="text-xs font-bold uppercase group-hover:text-forge-accent transition-colors">Neural Feedback (Notifications)</p>
-                  <p className="text-[10px] text-gray-600">Receive alerts when generation cycles complete.</p>
-                </div>
-                <div className="w-12 h-6 bg-forge-accent rounded-full p-1 cursor-pointer">
-                  <div className="w-4 h-4 bg-white rounded-full ml-auto shadow-sm" />
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-forge-input/50 border border-forge-border rounded group hover:border-forge-accent transition-colors">
-                <div>
-                  <p className="text-xs font-bold uppercase group-hover:text-forge-accent transition-colors">Private Manifest (Incognito)</p>
-                  <p className="text-[10px] text-gray-600">Hide your creations from the community resource hub.</p>
-                </div>
-                <div className="w-12 h-6 bg-forge-border rounded-full p-1 cursor-pointer">
-                  <div className="w-4 h-4 bg-gray-400 rounded-full" />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="p-4 bg-forge-accent/5 border border-forge-accent/20 rounded-sm">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-forge-accent mb-4 flex items-center gap-2">
-              <Key size={14} /> External API Configuration / API သတ်မှတ်ချက်
-            </h2>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">Gemini API Key (Optional)</label>
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[9px] text-forge-accent hover:underline uppercase font-bold">Get Key</a>
-                </div>
-                <div className="relative">
-                  <input 
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="Enter Custom API Key..."
-                    className="w-full bg-forge-input border border-forge-border p-3 text-xs text-white focus:border-forge-accent outline-none transition-all pr-10"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600">
-                    <Key size={14} />
-                  </div>
-                </div>
-                <p className="text-[9px] text-gray-600 leading-relaxed mt-2">
-                  Providing your own API key allows for higher rate limits and specialized model access. 
-                  Your key is stored locally and securely in your neural profile.
-                </p>
-              </div>
-              <button 
-                onClick={saveSettings}
-                disabled={isSavingSettings}
-                className="w-full py-3 bg-forge-accent/10 border border-forge-accent/40 text-forge-accent text-[10px] font-bold uppercase hover:bg-forge-accent transition-all hover:text-white"
-              >
-                {isSavingSettings ? 'Synchronizing...' : 'Commit Settings / ပြောင်းလဲမှုများကိုသိမ်းဆည်းမည်'}
-              </button>
-            </div>
-          </section>
-
-          <div className="flex flex-wrap justify-end gap-3 pt-6 border-t border-forge-border">
-            <button onClick={clearCreationLogs} className="forge-btn text-forge-accent border-forge-accent/30 hover:bg-forge-accent/10 whitespace-nowrap">Purge Creations / ဖန်တီးမှုများဖျက်ရန်</button>
-            <button onClick={clearChatLogs} className="forge-btn text-orange-500 border-orange-500/30 hover:bg-orange-500/10 whitespace-nowrap">Purge Chat Logs / မှတ်တမ်းဖျက်ရန်</button>
-            <button onClick={() => logout()} className="forge-btn text-red-500 border-red-500/30 hover:bg-red-500/10 whitespace-nowrap">Terminate Session / ထွက်ရန်</button>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
