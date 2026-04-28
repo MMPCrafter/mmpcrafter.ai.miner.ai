@@ -59,6 +59,7 @@ interface ChatMessage {
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>(localStorage.getItem('gemini_custom_key') || '');
   const [loading, setLoading] = useState(true);
@@ -154,10 +155,19 @@ export default function App() {
 
         <div className="p-4 border-t border-forge-border flex flex-col items-center gap-4">
           <button 
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
+            onClick={() => setIsSettingsOpen(true)}
             className="p-2 hover:bg-forge-input rounded transition-colors text-forge-text-secondary"
+            title="Settings / သတ်မှတ်ချက်များ"
           >
             <Settings size={20} />
+          </button>
+          
+          <button 
+            onClick={() => setSidebarOpen(!isSidebarOpen)}
+            className="p-2 hover:bg-forge-input rounded transition-colors text-forge-text-secondary"
+            title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+          >
+            <ChevronRight size={16} className={cn("transition-transform", isSidebarOpen && "rotate-180")} />
           </button>
           
           {!isGuest ? (
@@ -229,6 +239,23 @@ export default function App() {
             {activeView === 'account' && <AccountView user={user} customApiKey={customApiKey} setCustomApiKey={setCustomApiKey} key="acc" />}
           </AnimatePresence>
         </section>
+
+        <AnimatePresence>
+          {isSettingsOpen && (
+            <SettingsModal 
+              onClose={() => setIsSettingsOpen(false)} 
+              apiKey={customApiKey} 
+              onSave={(newKey) => {
+                setCustomApiKey(newKey);
+                localStorage.setItem('gemini_custom_key', newKey);
+                // Also update firebase if user is logged in
+                if (user) {
+                  setDoc(doc(db, 'users', user.uid), { customApiKey: newKey }, { merge: true });
+                }
+              }} 
+            />
+          )}
+        </AnimatePresence>
 
         <footer className="h-8 bg-forge-sidebar border-t border-forge-border px-6 flex items-center justify-between text-[10px] text-gray-600 font-mono">
           <div className="flex gap-4">
@@ -1176,6 +1203,110 @@ function SystemMonitor() {
         </div>
       </div>
     </section>
+  );
+}
+
+function SettingsModal({ onClose, apiKey, onSave }: { onClose: () => void, apiKey: string, onSave: (key: string) => void }) {
+  const [input, setInput] = useState(apiKey);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    onSave(input);
+    setSaved(true);
+    setTimeout(() => {
+      setSaved(false);
+      onClose();
+    }, 1000);
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        className="forge-card max-w-md w-full p-8 space-y-6 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button 
+          onClick={onClose}
+          className="absolute right-4 top-4 text-gray-500 hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-10 h-10 bg-forge-accent/20 rounded flex items-center justify-center text-forge-accent">
+            <Key size={24} />
+          </div>
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Forge Settings / စနစ်သတ်မှတ်ချက်များ</h2>
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">External Neuro-Link Config</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Gemini API Key</label>
+              <a 
+                href="https://aistudio.google.com/app/apikey" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-[9px] text-forge-accent hover:underline uppercase font-bold flex items-center gap-1"
+              >
+                Get Key <ExternalLink size={10} />
+              </a>
+            </div>
+            <div className="relative">
+              <input 
+                type="password"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Enter your Gemini API key..."
+                className="w-full bg-forge-input border border-forge-border p-3 text-xs text-white focus:border-forge-accent outline-none transition-all pr-10 rounded-sm"
+                autoFocus
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-700">
+                <Key size={14} />
+              </div>
+            </div>
+            <p className="text-[9px] text-gray-500 leading-relaxed italic">
+              Your key is only stored in this browser's local cache. It is used to overcome rate limits when generating assets.
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <button 
+              onClick={handleSave}
+              className={cn(
+                "w-full py-4 text-[10px] font-black tracking-[0.2em] uppercase transition-all rounded-sm border",
+                saved 
+                  ? "bg-green-500/20 border-green-500 text-green-500" 
+                  : "bg-forge-accent/10 border-forge-accent/40 text-forge-accent hover:bg-forge-accent hover:text-white"
+              )}
+            >
+              {saved ? "DATA_COMMITTED ✓" : "SAVE_CONFIG / သိမ်းဆည်းမည်"}
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 bg-forge-sidebar/30 border border-forge-border rounded-sm">
+           <div className="flex items-start gap-3">
+              <Info size={14} className="text-forge-accent mt-0.5" />
+              <p className="text-[9px] text-gray-500 leading-relaxed">
+                If the forge becomes unresponsive or reports "Quota Exceeded," providing your own key will restore functionality immediately.
+              </p>
+           </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
