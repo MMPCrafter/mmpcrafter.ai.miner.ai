@@ -23,7 +23,8 @@ import {
   Play,
   FileUp,
   Github,
-  History
+  History,
+  Key
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { minecraftChat, generateMinecraftContent, generateMinecraftSkinImage } from './lib/gemini';
@@ -59,6 +60,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [customApiKey, setCustomApiKey] = useState<string>(localStorage.getItem('gemini_custom_key') || '');
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -221,10 +223,10 @@ export default function App() {
 
         <section className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
-            {activeView === 'chat' && <ChatView user={user} setActiveView={setActiveView} key="chat" />}
-            {activeView === 'generator' && <GeneratorView user={user} setActiveView={setActiveView} key="gen" />}
+            {activeView === 'chat' && <ChatView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="chat" />}
+            {activeView === 'generator' && <GeneratorView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="gen" />}
             {activeView === 'hub' && <HubView key="hub" />}
-            {activeView === 'account' && <AccountView user={user} key="acc" />}
+            {activeView === 'account' && <AccountView user={user} customApiKey={customApiKey} setCustomApiKey={setCustomApiKey} key="acc" />}
           </AnimatePresence>
         </section>
 
@@ -266,7 +268,7 @@ function NavButton({ active, onClick, icon, label, myanmarLabel, isOpen }: { act
   );
 }
 
-function ChatView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
+function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | null, setActiveView: (view: View) => void, customApiKey?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -371,7 +373,7 @@ function ChatView({ user, setActiveView }: { user: FirebaseUser | null, setActiv
       }));
       
       const prompt = hasMedia ? `[User uploaded file: ${mediaName}] ${userText}` : userText;
-      const response = await minecraftChat(prompt, history);
+      const response = await minecraftChat(prompt, history, customApiKey);
       const botText = response || 'Neural link severed. Attempting reconnect...';
       const botMsgId = (Date.now() + 1).toString();
       
@@ -561,7 +563,7 @@ function ChatView({ user, setActiveView }: { user: FirebaseUser | null, setActiv
   );
 }
 
-function GeneratorView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
+function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUser | null, setActiveView: (view: View) => void, customApiKey?: string }) {
   const [type, setType] = useState<'addon' | 'skin' | 'world' | 'mod'>('addon');
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -618,7 +620,7 @@ function GeneratorView({ user, setActiveView }: { user: FirebaseUser | null, set
     setSkinImage(null);
     try {
       const fullPrompt = referenceFile ? `[Reference File: ${referenceFile.name}] ${prompt}` : prompt;
-      const res = await generateMinecraftContent(type, fullPrompt);
+      const res = await generateMinecraftContent(type, fullPrompt, customApiKey);
       if (res) {
         setResult(res);
         await saveCreation(type, res);
@@ -642,7 +644,7 @@ function GeneratorView({ user, setActiveView }: { user: FirebaseUser | null, set
     if (!result || type !== 'skin' || isGeneratingImage) return;
     setIsGeneratingImage(true);
     try {
-      const img = await generateMinecraftSkinImage(prompt);
+      const img = await generateMinecraftSkinImage(prompt, customApiKey);
       setSkinImage(img);
     } catch (err) {
       console.error(err);
@@ -1177,10 +1179,12 @@ function SystemMonitor() {
   );
 }
 
-function AccountView({ user }: { user: FirebaseUser | null }) {
+function AccountView({ user, customApiKey, setCustomApiKey }: { user: FirebaseUser | null, customApiKey: string, setCustomApiKey: (key: string) => void }) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(customApiKey);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -1190,7 +1194,14 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
     const fetchProfile = async () => {
       try {
         const uDoc = await getDoc(doc(db, 'users', user.uid));
-        if (uDoc.exists()) setProfile(uDoc.data());
+        if (uDoc.exists()) {
+          const data = uDoc.data();
+          setProfile(data);
+          if (data.customApiKey && !localStorage.getItem('gemini_custom_key')) {
+            setCustomApiKey(data.customApiKey);
+            setApiKeyInput(data.customApiKey);
+          }
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -1200,8 +1211,25 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
     fetchProfile();
   }, [user]);
 
-  const handleLoginRedirect = () => {
-    // This is handled by rendering LoginView inside AccountView if !user
+  const saveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      localStorage.setItem('gemini_custom_key', apiKeyInput);
+      setCustomApiKey(apiKeyInput);
+      
+      if (user) {
+        await setDoc(doc(db, 'users', user.uid), {
+          customApiKey: apiKeyInput,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+      alert("Settings updated successfully. / စနစ်သတ်မှတ်ချက်များ ပြုပြင်ပြီးပါပြီ။");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save settings.");
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   const clearCreationLogs = async () => {
@@ -1330,6 +1358,43 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
                   <div className="w-4 h-4 bg-gray-400 rounded-full" />
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section className="p-4 bg-forge-accent/5 border border-forge-accent/20 rounded-sm">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-forge-accent mb-4 flex items-center gap-2">
+              <Key size={14} /> External API Configuration / API သတ်မှတ်ချက်
+            </h2>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Gemini API Key (Optional)</label>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[9px] text-forge-accent hover:underline uppercase font-bold">Get Key</a>
+                </div>
+                <div className="relative">
+                  <input 
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder="Enter Custom API Key..."
+                    className="w-full bg-forge-input border border-forge-border p-3 text-xs text-white focus:border-forge-accent outline-none transition-all pr-10"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600">
+                    <Key size={14} />
+                  </div>
+                </div>
+                <p className="text-[9px] text-gray-600 leading-relaxed mt-2">
+                  Providing your own API key allows for higher rate limits and specialized model access. 
+                  Your key is stored locally and securely in your neural profile.
+                </p>
+              </div>
+              <button 
+                onClick={saveSettings}
+                disabled={isSavingSettings}
+                className="w-full py-3 bg-forge-accent/10 border border-forge-accent/40 text-forge-accent text-[10px] font-bold uppercase hover:bg-forge-accent transition-all hover:text-white"
+              >
+                {isSavingSettings ? 'Synchronizing...' : 'Commit Settings / ပြောင်းလဲမှုများကိုသိမ်းဆည်းမည်'}
+              </button>
             </div>
           </section>
 

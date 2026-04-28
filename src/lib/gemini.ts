@@ -1,8 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const getAI = (customKey? : string) => {
+  return new GoogleGenAI({ apiKey: customKey || process.env.GEMINI_API_KEY || '' });
+};
 
-export const minecraftChat = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
+export const minecraftChat = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[], customKey?: string) => {
+  const ai = getAI(customKey);
   const model = "gemini-3-flash-preview";
   const systemInstruction = `You are a helpful and friendly Minecraft AI Companion. 
   Your goal is to help players with anything Minecraft-related:
@@ -27,7 +30,8 @@ export const minecraftChat = async (message: string, history: { role: 'user' | '
   return response.text;
 };
 
-export const generateMinecraftContent = async (type: 'addon' | 'skin' | 'world' | 'mod', prompt: string) => {
+export const generateMinecraftContent = async (type: 'addon' | 'skin' | 'world' | 'mod', prompt: string, customKey?: string) => {
+  const ai = getAI(customKey);
   const model = "gemini-3-flash-preview";
   const systemInstruction = `You are a professional Minecraft Mod and Content Generator.
   The user wants an idea or template for a ${type}.
@@ -59,8 +63,9 @@ export const generateMinecraftContent = async (type: 'addon' | 'skin' | 'world' 
   return response.text;
 };
 
-export const generateMinecraftSkinImage = async (prompt: string) => {
+export const generateMinecraftSkinImage = async (prompt: string, customKey?: string) => {
   try {
+    const ai = getAI(customKey);
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
