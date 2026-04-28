@@ -97,9 +97,8 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <LoginView />;
-  }
+  // Allow unauthenticated users to use the app in guest mode
+  const isGuest = !user;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-forge-bg text-forge-text-primary">
@@ -159,19 +158,37 @@ export default function App() {
             <Settings size={20} />
           </button>
           
-          <button 
-            onClick={() => logout()}
-            className="p-2 hover:bg-red-500/10 rounded transition-colors text-red-500/50 hover:text-red-500"
-            title="Logout"
-          >
-            <LogOut size={20} />
-          </button>
+          {!isGuest ? (
+            <button 
+              onClick={() => logout()}
+              className="p-2 hover:bg-red-500/10 rounded transition-colors text-red-500/50 hover:text-red-500"
+              title="Logout"
+            >
+              <LogOut size={20} />
+            </button>
+          ) : (
+            <button 
+              onClick={() => setActiveView('account')}
+              className="p-2 hover:bg-forge-accent/10 rounded transition-colors text-forge-accent/50 hover:text-forge-accent"
+              title="Login"
+            >
+              <UserIcon size={20} />
+            </button>
+          )}
 
-          <div className="w-8 h-8 rounded overflow-hidden border border-forge-border shadow-inner bg-forge-input">
+          <div className={cn(
+            "w-8 h-8 rounded overflow-hidden border border-forge-border shadow-inner",
+            isGuest ? "bg-forge-sidebar border-gray-700" : "bg-forge-input"
+          )}>
             {user?.photoURL ? (
               <img src={user.photoURL} alt="User" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#795548] to-[#5D4037]" />
+              <div className={cn(
+                "w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600",
+                isGuest ? "bg-gray-800" : "bg-gradient-to-br from-[#795548] to-[#5D4037]"
+              )}>
+                {isGuest ? '?' : ''}
+              </div>
             )}
           </div>
         </div>
@@ -204,8 +221,8 @@ export default function App() {
 
         <section className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
-            {activeView === 'chat' && <ChatView user={user} key="chat" />}
-            {activeView === 'generator' && <GeneratorView user={user} key="gen" />}
+            {activeView === 'chat' && <ChatView user={user} setActiveView={setActiveView} key="chat" />}
+            {activeView === 'generator' && <GeneratorView user={user} setActiveView={setActiveView} key="gen" />}
             {activeView === 'hub' && <HubView key="hub" />}
             {activeView === 'account' && <AccountView user={user} key="acc" />}
           </AnimatePresence>
@@ -249,7 +266,7 @@ function NavButton({ active, onClick, icon, label, myanmarLabel, isOpen }: { act
   );
 }
 
-function ChatView({ user }: { user: FirebaseUser | null }) {
+function ChatView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -260,7 +277,11 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
 
   // Load chat history from Firestore on mount
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setIsInitialLoading(false);
+      setMessages([{ id: '1', role: 'model', text: "Hello! I've analyzed your current session. You're exploring in Guest Mode. Need some help with crafting recipes or mob behavior patterns? (မြန်မာလိုလည်း ပြောနိုင်သည်)" }]);
+      return;
+    }
     
     const loadHistory = async () => {
       try {
@@ -324,7 +345,7 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
   };
 
   const handleSend = async () => {
-    if ((!input.trim() && !mediaFile) || isLoading || !user) return;
+    if ((!input.trim() && !mediaFile) || isLoading) return;
 
     const userText = input;
     const hasMedia = !!mediaFile;
@@ -392,6 +413,12 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-forge-border scrollbar-track-transparent"
         >
+          {!user && (
+            <div className="p-3 bg-forge-accent/5 border border-dashed border-forge-accent/30 rounded flex items-center justify-between mb-4">
+              <span className="text-[10px] text-forge-accent uppercase font-bold tracking-tighter">Guest Session Active / ဧည့်သည်အဖြစ်သုံးနေသည်</span>
+              <span className="text-[9px] text-gray-600 italic">No persistence</span>
+            </div>
+          )}
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -534,7 +561,7 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
   );
 }
 
-function GeneratorView({ user }: { user: FirebaseUser | null }) {
+function GeneratorView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
   const [type, setType] = useState<'addon' | 'skin' | 'world' | 'mod'>('addon');
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -686,7 +713,21 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
           <button onClick={() => setShowHistory(false)}><X size={14} className="text-gray-500" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {creations.length === 0 ? (
+          {!user ? (
+            <div className="flex flex-col items-center gap-4 text-center mt-10">
+              <History size={32} className="text-gray-800" />
+              <p className="text-[10px] text-gray-600 font-bold uppercase leading-relaxed px-4">
+                Login Required for History Persistence.<br/>
+                မှတ်တမ်းများသိမ်းဆည်းရန် အကောင့်ဝင်ပါ။
+              </p>
+              <button 
+                onClick={() => setActiveView('account')}
+                className="forge-btn text-[9px] px-4 py-2 border-forge-accent/30 text-forge-accent"
+              >
+                Sign In
+              </button>
+            </div>
+          ) : creations.length === 0 ? (
             <div className="text-[10px] text-gray-700 font-mono italic text-center mt-10">NO ENTRIES FOUND</div>
           ) : (
             creations.map((item) => (
@@ -717,6 +758,26 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
           >
             <History size={20} />
           </button>
+        )}
+
+        {!user && (
+          <div className="mb-4 p-3 bg-forge-accent/5 border border-forge-accent/20 rounded flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded bg-forge-accent/10 flex items-center justify-center">
+                <Info size={16} className="text-forge-accent" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-white uppercase tracking-widest">Guest Mode Active</p>
+                <p className="text-[9px] text-gray-500">Creations will not be stored in neural history. / ဖန်တီးမှုများမှတ်တမ်းတင်မည်မဟုတ်ပါ။</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setActiveView('account')}
+              className="text-[9px] font-bold text-forge-accent uppercase hover:underline"
+            >
+              Sign In to Store Data
+            </button>
+          </div>
         )}
 
         <div className="flex flex-col lg:flex-row gap-6">
@@ -961,7 +1022,7 @@ function HubView() {
   );
 }
 
-function LoginView() {
+function LoginView({ inline = false }: { inline?: boolean }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -986,115 +1047,108 @@ function LoginView() {
     }
   };
 
+  const content = (
+    <div className={cn("forge-card w-full p-8 flex flex-col items-center gap-6", !inline && "max-w-md")}>
+      <div className="w-20 h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
+        <Pickaxe className="text-white" size={48} />
+      </div>
+      
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI Forge</p>
+        <p className="text-[10px] text-forge-accent/70 font-bold uppercase tracking-widest">မြန်မာဘာသာဖြင့် အသုံးပြုနိုင်သည်</p>
+      </div>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs font-medium text-center"
+        >
+          <AlertTriangle className="inline-block mr-2" size={14} />
+          {error}
+        </motion.div>
+      )}
+
+      <div className="w-full space-y-4">
+        <div className="space-y-1">
+          <p className="text-[10px] text-gray-400 font-bold uppercase text-center mb-4 leading-relaxed">
+            Sign in with your social account to start creating.<br/>
+            အကောင့်ဖွင့်ရန် အောက်ပါ ခလုတ်များကို နှိပ်ပါ။
+          </p>
+          <button 
+            onClick={() => handleSocialLogin('google')}
+            disabled={isSubmitting}
+            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <Globe size={20} className="text-blue-500" />
+              <div className="text-left">
+                <div className="font-bold text-white leading-none">Google Account</div>
+                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Google ဖြင့် အကောင့်ဝင်မည်</div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+          </button>
+          
+          <button 
+            onClick={() => handleSocialLogin('microsoft')}
+            disabled={isSubmitting}
+            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <Pickaxe size={20} className="text-orange-500" />
+              <div className="text-left">
+                <div className="font-bold text-white leading-none">Microsoft Account</div>
+                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Microsoft ဖြင့် အကောင့်ဝင်မည်</div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+          </button>
+
+          <button 
+            onClick={() => handleSocialLogin('github')}
+            disabled={isSubmitting}
+            className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <Github size={20} className="text-white" />
+              <div className="text-left">
+                <div className="font-bold text-white leading-none">GitHub Account</div>
+                <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">GitHub ဖြင့် အကောင့်ဝင်မည်</div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 py-2">
+          <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
+          <span className="text-[10px] text-gray-700 font-bold uppercase">System Info</span>
+          <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
+        </div>
+
+        <div className="p-4 bg-forge-sidebar/30 border border-forge-border rounded space-y-3">
+           <div className="flex items-start gap-3">
+              <Info size={16} className="text-forge-accent mt-0.5 shrink-0" />
+              <div className="text-[11px] leading-relaxed text-gray-400">
+                <span className="text-white font-bold">Account Opening:</span> Login with Google, Microsoft, or GitHub. No complex forms required.
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-gray-700 font-mono text-center max-w-[280px]">
+        By connecting your neural link, you agree to the Automated Asset Generation Protocols.
+      </p>
+    </div>
+  );
+
+  if (inline) return content;
+
   return (
     <div className="h-screen w-full bg-forge-bg flex items-center justify-center p-4">
-      <div className="forge-card w-full max-w-md p-8 flex flex-col items-center gap-6">
-        <div className="w-20 h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
-          <Pickaxe className="text-white" size={48} />
-        </div>
-        
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI Forge</p>
-          <p className="text-[10px] text-forge-accent/70 font-bold uppercase tracking-widest">မြန်မာဘာသာဖြင့် အသုံးပြုနိုင်သည်</p>
-        </div>
-
-        {error && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs font-medium text-center"
-          >
-            <AlertTriangle className="inline-block mr-2" size={14} />
-            {error}
-          </motion.div>
-        )}
-
-        <div className="w-full space-y-4">
-          <div className="space-y-1">
-            <p className="text-[10px] text-gray-400 font-bold uppercase text-center mb-4 leading-relaxed">
-              Sign in with your social account to start creating.<br/>
-              အကောင့်ဖွင့်ရန် အောက်ပါ ခလုတ်များကို နှိပ်ပါ။
-            </p>
-            <button 
-              onClick={() => handleSocialLogin('google')}
-              disabled={isSubmitting}
-              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-            >
-              <div className="flex items-center gap-4">
-                <Globe size={20} className="text-blue-500" />
-                <div className="text-left">
-                  <div className="font-bold text-white leading-none">Google Account</div>
-                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Google ဖြင့် အကောင့်ဝင်မည်</div>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-            </button>
-            
-            <button 
-              onClick={() => handleSocialLogin('microsoft')}
-              disabled={isSubmitting}
-              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-            >
-              <div className="flex items-center gap-4">
-                <Pickaxe size={20} className="text-orange-500" />
-                <div className="text-left">
-                  <div className="font-bold text-white leading-none">Microsoft Account</div>
-                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Microsoft ဖြင့် အကောင့်ဝင်မည်</div>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-            </button>
-
-            <button 
-              onClick={() => handleSocialLogin('github')}
-              disabled={isSubmitting}
-              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
-            >
-              <div className="flex items-center gap-4">
-                <Github size={20} className="text-white" />
-                <div className="text-left">
-                  <div className="font-bold text-white leading-none">GitHub Account</div>
-                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">GitHub ဖြင့် အကောင့်ဝင်မည်</div>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 py-2">
-            <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
-            <span className="text-[10px] text-gray-700 font-bold uppercase">System Info</span>
-            <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
-          </div>
-
-          <div className="p-4 bg-forge-sidebar/30 border border-forge-border rounded space-y-3">
-             <div className="flex items-start gap-3">
-                <Info size={16} className="text-forge-accent mt-0.5 shrink-0" />
-                <div className="text-[11px] leading-relaxed text-gray-400">
-                  <span className="text-white font-bold">Account Opening:</span> Login with Google, Microsoft, or GitHub. No complex forms required.
-                  <br/><br/>
-                  <span className="text-orange-500 font-bold">VERCEL/GITHUB USERS:</span> Ensure your domain is added to <span className="text-white">Firebase {">"} Authentication {">"} Settings {">"} Authorized Domains</span>.
-                  <br/><br/>
-                  <span className="text-forge-accent font-bold italic">PRO TIP:</span> If login fails inside the GitHub or Vercel app browser, please open this link in a standard browser like <span className="text-white">Chrome</span> or <span className="text-white">Safari</span>.
-                </div>
-             </div>
-             <div className="flex items-start gap-3 border-t border-forge-border pt-3">
-                <div className="text-[11px] leading-relaxed text-gray-400">
-                  <span className="text-white font-bold">အကောင့်ဖွင့်နည်း:</span> Google, Microsoft (သို့မဟုတ်) GitHub အကောင့်တစ်ခုခုဖြင့် တိုက်ရိုက်ဝင်နိုင်ပါသည်။
-                  <br/><br/>
-                  <span className="text-orange-500 font-bold">သတိပြုရန်:</span> Vercel သို့မဟုတ် GitHub link ဖြင့်သုံးနေပါက Firebase Console ရှိ <span className="text-white">Authorized Domains</span> စာရင်းထဲတွင် သင့် link ကို ထည့်ထားရပါမည်။
-                  <br/><br/>
-                  <span className="text-forge-accent font-bold italic">အကြံပြုချက်:</span> အကယ်၍ GitHub (သို့မဟုတ်) Vercel app browser များအတွင်း အကောင့်ဝင်မရပါက Chrome သို့မဟုတ် Safari browser တွင် ဖွင့်၍ အသုံးပြုပါ။
-                </div>
-             </div>
-          </div>
-        </div>
-
-        <p className="text-[10px] text-gray-700 font-mono text-center max-w-[280px]">
-          By connecting your neural link, you agree to the Automated Asset Generation Protocols.
-        </p>
-      </div>
+      {content}
     </div>
   );
 }
@@ -1129,7 +1183,10 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
   const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     const fetchProfile = async () => {
       try {
         const uDoc = await getDoc(doc(db, 'users', user.uid));
@@ -1142,6 +1199,10 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
     };
     fetchProfile();
   }, [user]);
+
+  const handleLoginRedirect = () => {
+    // This is handled by rendering LoginView inside AccountView if !user
+  };
 
   const clearCreationLogs = async () => {
     if (!user || clearing) return;
@@ -1184,6 +1245,27 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
   };
 
   if (loading) return <div className="p-10 text-center opacity-50 animate-pulse font-mono text-xs text-forge-accent">Accessing Profile Data... / ကိုယ်ရေးအချက်အလက်များကို ရယူနေသည်...</div>;
+
+  if (!user) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-8 text-center">
+           <div className="w-20 h-20 bg-gray-800 rounded-full mx-auto flex items-center justify-center border border-forge-border">
+              <UserIcon size={40} className="text-gray-600" />
+           </div>
+           <div>
+              <h2 className="text-xl font-bold uppercase tracking-widest text-forge-text-primary mb-2">Guest Access / ဧည့်သည်အဖြစ်ဝင်ရောက်ထားသည်</h2>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Connect your account to save your creations, access your history, and join the community hub.
+                <br/>
+                သင့်ဖန်တီးမှုများကို သိမ်းဆည်းရန်နှင့် မှတ်တမ်းများကြည့်ရန် အကောင့်ဝင်ပါ။
+              </p>
+           </div>
+           <LoginView inline />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div 
