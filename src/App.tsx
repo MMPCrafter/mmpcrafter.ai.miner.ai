@@ -975,7 +975,7 @@ function LoginView() {
       } else if (err.code === 'auth/cancelled-by-user') {
         setError("Login cancelled. / အကောင့်ဝင်ခြင်းကို ဖျက်သိမ်းလိုက်သည်။");
       } else {
-        setError("Connection failed. Please try again. / ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်ကြိုးစားကြည့်ပါ။");
+        setError(`Connection failed [${err.code || 'unknown'}]. Please try again. / ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်ကြိုးစားကြည့်ပါ။`);
       }
     } finally {
       setIsSubmitting(false);
