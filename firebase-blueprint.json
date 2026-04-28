@@ -16,7 +16,8 @@
             "theme": { "type": "string", "enum": ["light", "dark", "system"] },
             "notifications": { "type": "boolean" }
           }
-        }
+        },
+        "customApiKey": { "type": "string" }
       },
       "required": ["displayName", "email", "createdAt"]
     },

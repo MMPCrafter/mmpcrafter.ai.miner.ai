@@ -65,18 +65,20 @@ service cloud.firestore {
       
       allow create: if isOwner(userId) && isValidId(userId) && 
                       incoming().keys().hasAll(['displayName', 'email', 'createdAt']) &&
+                      incoming().keys().size() >= 3 &&
                       isValidUser(incoming()) && 
                       incoming().createdAt == request.time;
       
-      allow update: if isOwner(userId) && isEmailVerified() && isValidId(userId) && 
+      allow update: if isOwner(userId) && isValidId(userId) && 
                       isValidUser(incoming()) && (
+                        // Profile Sync / Settings update
                         (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'settings', 'customApiKey']) &&
                          (incoming().get('lastLogin', request.time) == request.time))
                       );
     }
 
     match /chats/{messageId} {
-      allow read: if isSignedIn() && isValidId(messageId) && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(messageId) && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       
       allow create: if isOwner(incoming().userId) && isEmailVerified() && 

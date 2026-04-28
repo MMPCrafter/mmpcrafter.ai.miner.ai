@@ -48,7 +48,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type View = 'chat' | 'generator' | 'hub' | 'account';
+type View = 'chat' | 'generator' | 'hub' | 'account' | 'history';
 
 interface ChatMessage {
   id: string;
@@ -58,7 +58,7 @@ interface ChatMessage {
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>('chat');
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>(localStorage.getItem('gemini_custom_key') || '');
@@ -105,17 +105,37 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-forge-bg text-forge-text-primary">
+      {/* Sidebar Overlay for Mobile */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <aside 
         className={cn(
-          "z-20 flex flex-col transition-all duration-300 ease-in-out border-r border-forge-border bg-forge-sidebar",
-          isSidebarOpen ? "w-64" : "w-20"
+          "fixed lg:relative z-50 h-full flex flex-col transition-all duration-300 ease-in-out border-r border-forge-border bg-forge-sidebar",
+          isSidebarOpen ? "w-64 translate-x-0" : "w-16 -translate-x-full lg:translate-x-0 lg:w-20"
         )}
       >
-        <div className="py-6 flex items-center justify-center">
-          <div className="w-12 h-12 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
-            <Pickaxe className="text-white" size={28} />
+        <div className="py-6 flex items-center justify-center relative">
+          <div className="w-10 h-10 lg:w-12 lg:h-12 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
+            <Pickaxe className="text-white" size={window.innerWidth < 1024 ? 20 : 28} />
           </div>
+          {/* Mobile Close Button */}
+          <button 
+            onClick={() => setSidebarOpen(false)} 
+            className="absolute right-4 top-1/2 -translate-y-1/2 lg:hidden text-gray-500"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="flex-1 flex flex-col items-center gap-6 mt-8">
@@ -133,6 +153,14 @@ export default function App() {
             icon={<Wand2 size={24} />}
             label="Creator"
             myanmarLabel="ဖန်တီးသူ"
+            isOpen={isSidebarOpen}
+          />
+          <NavButton 
+            active={activeView === 'history'} 
+            onClick={() => setActiveView('history')}
+            icon={<History size={24} />}
+            label="History"
+            myanmarLabel="မှတ်တမ်း"
             isOpen={isSidebarOpen}
           />
           <NavButton 
@@ -208,24 +236,41 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 border-b border-forge-border px-8 flex items-center justify-between bg-forge-header text-forge-text-secondary">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-bold tracking-tight">
+        <header className="h-16 border-b border-forge-border px-4 lg:px-8 flex items-center justify-between bg-forge-header text-forge-text-secondary">
+          <div className="flex items-center gap-3 lg:gap-4">
+            <button 
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 -ml-2 lg:hidden hover:bg-forge-input rounded transition-colors"
+            >
+              <div className="w-5 h-0.5 bg-forge-accent mb-1"></div>
+              <div className="w-3 h-0.5 bg-forge-accent mb-1"></div>
+              <div className="w-5 h-0.5 bg-forge-accent"></div>
+            </button>
+            <h1 className="text-base lg:text-lg font-bold tracking-tight truncate max-w-[120px] sm:max-w-none">
               MINER <span className="text-forge-accent">AI</span>
             </h1>
-            <span className="px-2 py-0.5 bg-forge-sidebar text-[10px] uppercase tracking-widest text-gray-500 rounded border border-forge-border">v1.4.0-Stable</span>
+            <span className="hidden xs:block px-2 py-0.5 bg-forge-sidebar text-[10px] uppercase tracking-widest text-gray-500 rounded border border-forge-border">v1.4</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 lg:gap-6">
             <div className="flex items-center gap-2">
               <div className={cn(
                 "w-2 h-2 rounded-full",
-                isOnline ? "bg-green-500 animate-pulse" : "bg-red-500 animate-bounce"
+                isOnline ? "bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500 animate-bounce shadow-[0_0_8px_rgba(239,68,68,0.6)]"
               )}></div>
-              <span className="text-xs text-gray-500">
-                {isOnline ? "Link Status: STABLE / ချိတ်ဆက်မှု ကောင်းမွန်သည်" : "Link Status: SEVERED / ချိတ်ဆက်မှု ပြတ်တောက်နေသည်"}
+              <span className="text-[10px] sm:text-xs text-gray-500">
+                {isOnline ? (
+                  <span className="hidden xs:inline">STATUS: <span className="text-green-500/80 font-black tracking-tighter">STABLE</span></span>
+                ) : (
+                  <span className="text-red-500/80 font-black">LOCAL_MEMORY_ONLY</span>
+                )}
               </span>
             </div>
-            <div className="hidden sm:flex items-center gap-2 border-l border-forge-border pl-6">
+            {/* PWA / Offline AI Indicator */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-forge-accent/5 border border-forge-accent/20 rounded-full">
+               <div className="w-1 h-1 bg-forge-accent rounded-full animate-ping"></div>
+               <span className="text-[9px] text-forge-accent font-black uppercase tracking-widest">Offline_Sync_Ready</span>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 border-l border-forge-border pl-6">
                <span className="text-[10px] text-gray-600 font-mono">LATENCY: {isOnline ? '24ms' : 'OFFLINE'}</span>
             </div>
           </div>
@@ -235,6 +280,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             {activeView === 'chat' && <ChatView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="chat" />}
             {activeView === 'generator' && <GeneratorView user={user} setActiveView={setActiveView} customApiKey={customApiKey} key="gen" />}
+            {activeView === 'history' && <HistoryView user={user} setActiveView={setActiveView} key="history" />}
             {activeView === 'hub' && <HubView key="hub" />}
             {activeView === 'account' && <AccountView user={user} customApiKey={customApiKey} setCustomApiKey={setCustomApiKey} key="acc" />}
           </AnimatePresence>
@@ -257,14 +303,14 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <footer className="h-8 bg-forge-sidebar border-t border-forge-border px-6 flex items-center justify-between text-[10px] text-gray-600 font-mono">
-          <div className="flex gap-4">
-            <span>LATENCY: 24ms</span>
-            <span>RAM_USAGE: 412MB</span>
+        <footer className="h-10 lg:h-8 bg-forge-sidebar border-t border-forge-border px-4 lg:px-6 flex items-center justify-between text-[9px] lg:text-[10px] text-gray-600 font-mono">
+          <div className="flex gap-3 lg:gap-4 truncate">
+            <span>PING: {isOnline ? '24ms' : 'N/A'}</span>
+            <span className="hidden sm:inline text-forge-accent">ESTABLISHED</span>
           </div>
-          <div className="flex gap-4 uppercase font-bold">
-            <span className="text-forge-accent">SYSTEM_READY</span>
-            <span>FORGE_CORE_BUILD: 44.1</span>
+          <div className="flex gap-3 lg:gap-4 uppercase font-bold text-right">
+            <span className="hidden sm:inline">BUILD: 44.1</span>
+            <span className="text-gray-700">© 2026 FORGE</span>
           </div>
         </footer>
       </main>
@@ -304,7 +350,7 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load chat history from Firestore on mount
+  // Load chat history from Firestore with real-time sync
   useEffect(() => {
     if (!user) {
       setIsInitialLoading(false);
@@ -312,38 +358,49 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
       return;
     }
     
-    const loadHistory = async () => {
-      try {
-        const q = query(
-          collection(db, 'chats'),
-          where('userId', '==', user.uid),
-          orderBy('createdAt', 'asc'),
-          limit(50)
-        );
-        const querySnapshot = await getDocs(q);
-        const history: ChatMessage[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          history.push({ id: doc.id, role: data.role, text: data.text });
-        });
+    const q = query(
+      collection(db, 'chats'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'asc'),
+      limit(100)
+    );
 
-        if (history.length === 0) {
-          // Default greeting if no history
-          setMessages([{ id: '1', role: 'model', text: "Hello! I've analyzed your current session. You're exploring a new biome. Need some help with crafting recipes or mob behavior patterns?" }]);
-        } else {
-          setMessages(history);
-        }
-      } catch (err) {
-        console.error("Error loading chat history:", err);
-        // Fallback to minimal state
-        setMessages([{ id: '1', role: 'model', text: "Welcome back! I couldn't load our old logs, but I'm ready for new commands." }]);
-      } finally {
-        setIsInitialLoading(false);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const history: ChatMessage[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        history.push({ id: doc.id, role: data.role, text: data.text });
+      });
+
+      if (history.length === 0) {
+        setMessages([{ id: '1', role: 'model', text: "Hello! I've analyzed your current session. You're exploring a new biome. Need some help with crafting recipes or mob behavior patterns?" }]);
+      } else {
+        setMessages(history);
       }
-    };
+      setIsInitialLoading(false);
+    }, (err) => {
+      console.error("Chat history sync error:", err);
+      setIsInitialLoading(false);
+    });
 
-    loadHistory();
+    return () => unsubscribe();
   }, [user]);
+
+  const handleClearHistory = async () => {
+    if (!user || !window.confirm("Clear all neural chat logs? / မှတ်တမ်းအားလုံးကို ဖြတ်ထုတ်မည်လား?")) return;
+    
+    try {
+      const q = query(collection(db, 'chats'), where('userId', '==', user.uid));
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      snapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Failed to clear history:", err);
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -379,19 +436,23 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
     const userText = input;
     const hasMedia = !!mediaFile;
     const mediaName = mediaFile?.name;
-    const userMsgId = Date.now().toString();
     
     let displayMsg = userText;
     if (hasMedia) {
       displayMsg = `📎 **Attached:** ${mediaName}\n\n${userText}`;
     }
 
-    setMessages(prev => [...prev, { id: userMsgId, role: 'user', text: displayMsg }]);
     setInput('');
     setMediaFile(null);
     setIsLoading(true);
 
-    saveMessage('user', displayMsg);
+    // Only save to Firestore if user is present
+    if (user) {
+      await saveMessage('user', displayMsg);
+    } else {
+      // Local state fallback for guests
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMsg }]);
+    }
 
     try {
       const history = messages.map(m => ({
@@ -402,17 +463,21 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
       const prompt = hasMedia ? `[User uploaded file: ${mediaName}] ${userText}` : userText;
       const response = await minecraftChat(prompt, history, customApiKey);
       const botText = response || 'Neural link severed. Attempting reconnect...';
-      const botMsgId = (Date.now() + 1).toString();
       
-      setMessages(prev => [...prev, { id: botMsgId, role: 'model', text: botText }]);
-      saveMessage('model', botText);
-
+      if (user) {
+        await saveMessage('model', botText);
+      } else {
+        setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: botText }]);
+      }
     } catch (err) {
       console.error(err);
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: "Connection error. Check your uplink (internet) and try again." }]);
+      const errorMsg = "Connection error. Check your uplink (internet) and try again.";
+      if (user) {
+        // Optional: don't save errors to long-term history?
+      }
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: errorMsg }]);
     } finally {
-      setIsLoading(true);
-      setTimeout(() => setIsLoading(false), 300);
+      setIsLoading(false);
     }
   };
 
@@ -430,12 +495,24 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="flex h-full p-6 gap-6 max-w-[1400px] mx-auto w-full"
+      className="flex h-full p-4 lg:p-6 gap-6 max-w-[1400px] mx-auto w-full overflow-hidden"
     >
-      <div className="flex-[1.2] forge-card flex flex-col relative">
-        <div className="p-4 border-b border-forge-border flex items-center gap-3 bg-forge-sidebar/50">
-          <div className="w-3 h-3 bg-forge-accent"></div>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-forge-text-secondary">Companion Chat</h2>
+      <div className="flex-1 lg:flex-[1.2] forge-card flex flex-col relative overflow-hidden">
+        <div className="p-4 border-b border-forge-border flex items-center justify-between bg-forge-sidebar/50">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 bg-forge-accent"></div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-forge-text-secondary">Companion Chat</h2>
+          </div>
+          {user && (
+            <button 
+              onClick={handleClearHistory}
+              className="text-[9px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 transition-colors flex items-center gap-2"
+              title="Clear Memory"
+            >
+              <AlertTriangle size={12} />
+              <span className="hidden sm:inline">Purge Memory / ဖြတ်ထုတ်ရန်</span>
+            </button>
+          )}
         </div>
         
         <div 
@@ -481,12 +558,12 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
           )}
         </div>
 
-        <div className="p-4 bg-black/20 border-t border-forge-border">
+        <div className="p-3 lg:p-4 bg-black/20 border-t border-forge-border">
           {mediaFile && (
             <div className="mb-2 p-2 bg-forge-input border border-forge-accent/30 rounded flex items-center justify-between text-[10px]">
               <div className="flex items-center gap-2">
                 <Paperclip size={12} className="text-forge-accent" />
-                <span className="text-gray-400 uppercase font-mono max-w-[200px] truncate">{mediaFile.name}</span>
+                <span className="text-gray-400 uppercase font-mono max-w-[120px] sm:max-w-[200px] truncate">{mediaFile.name}</span>
               </div>
               <button onClick={() => setMediaFile(null)} className="text-gray-600 hover:text-red-500">
                 <X size={12} />
@@ -494,7 +571,7 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
             </div>
           )}
           <div className="relative flex items-center gap-2">
-            <div className="flex items-center gap-1 mr-2 px-2 border-r border-forge-border">
+            <div className="hidden sm:flex items-center gap-1 mr-2 px-2 border-r border-forge-border">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -517,12 +594,12 @@ function ChatView({ user, setActiveView, customApiKey }: { user: FirebaseUser | 
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Query the forge..."
-              className="flex-1 bg-forge-input border border-forge-border py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-forge-accent transition-all text-forge-text-primary placeholder:text-gray-600"
+              className="flex-1 bg-forge-input border border-forge-border py-2.5 lg:py-3 pl-3 lg:pl-4 pr-10 lg:pr-12 text-sm focus:outline-none focus:border-forge-accent transition-all text-forge-text-primary placeholder:text-gray-600 rounded-sm"
             />
             <button 
               onClick={handleSend}
               disabled={isLoading}
-              className="absolute right-2 px-4 py-1.5 bg-forge-accent text-white text-[10px] font-bold uppercase rounded-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-30"
+              className="absolute right-1.5 lg:right-2 px-3 lg:px-4 py-1.5 bg-forge-accent text-white text-[9px] lg:text-[10px] font-bold uppercase rounded-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-30"
             >
               SEND
             </button>
@@ -778,14 +855,14 @@ function GeneratorView({ user, setActiveView, customApiKey }: { user: FirebaseUs
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto relative">
+      <div className="flex-1 flex flex-col p-3 sm:p-6 overflow-y-auto relative">
         {!showHistory && (
           <button 
             onClick={() => setShowHistory(true)}
-            className="absolute left-6 top-6 z-10 p-2 bg-forge-sidebar border border-forge-border rounded-full text-forge-accent hover:scale-110 transition-all shadow-xl"
+            className="absolute left-4 top-4 lg:left-6 lg:top-6 z-10 p-2 bg-forge-sidebar border border-forge-border rounded-full text-forge-accent hover:scale-110 transition-all shadow-xl"
             title="Show History"
           >
-            <History size={20} />
+            <History size={18} />
           </button>
         )}
 
@@ -990,7 +1067,7 @@ function HubView() {
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 1.02 }}
-      className="flex flex-col h-full p-10 max-w-5xl mx-auto w-full overflow-y-auto"
+      className="flex flex-col h-full p-4 sm:p-10 max-w-5xl mx-auto w-full overflow-y-auto"
     >
       <div className="grid md:grid-cols-3 gap-6 mb-10">
         {resources.map((res) => (
@@ -1077,13 +1154,13 @@ function LoginView({ inline = false }: { inline?: boolean }) {
   };
 
   const content = (
-    <div className={cn("forge-card w-full p-8 flex flex-col items-center gap-6", !inline && "max-w-md")}>
-      <div className="w-20 h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
-        <Pickaxe className="text-white" size={48} />
+    <div className={cn("forge-card w-full p-6 md:p-8 flex flex-col items-center gap-6", !inline && "max-w-md shadow-2xl")}>
+      <div className="w-16 h-16 md:w-20 md:h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
+        <Pickaxe className="text-white" size={window.innerWidth < 768 ? 32 : 48} />
       </div>
       
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
+        <h1 className="text-2xl md:text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
         <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI Forge</p>
         <p className="text-[10px] text-forge-accent/70 font-bold uppercase tracking-widest">မြန်မာဘာသာဖြင့် အသုံးပြုနိုင်သည်</p>
       </div>
@@ -1231,7 +1308,7 @@ function SettingsModal({ onClose, apiKey, onSave }: { onClose: () => void, apiKe
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="forge-card max-w-md w-full p-8 space-y-6 relative"
+        className="forge-card max-w-md w-full p-6 lg:p-8 space-y-6 relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button 
@@ -1306,6 +1383,172 @@ function SettingsModal({ onClose, apiKey, onSave }: { onClose: () => void, apiKe
            </div>
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+function HistoryView({ user, setActiveView }: { user: FirebaseUser | null, setActiveView: (view: View) => void }) {
+  const [activeTab, setActiveTab] = useState<'chats' | 'creations'>('chats');
+  const [chats, setChats] = useState<any[]>([]);
+  const [creations, setCreations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch Chats
+        const chatQuery = query(
+          collection(db, 'chats'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        const chatSnap = await getDocs(chatQuery);
+        setChats(chatSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        // Fetch Creations
+        const creationQuery = query(
+          collection(db, 'creations'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        const creationSnap = await getDocs(creationQuery);
+        setCreations(creationSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("History fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-forge-input border border-forge-border rounded-full flex items-center justify-center mb-6">
+          <History size={40} className="text-gray-700" />
+        </div>
+        <h2 className="text-xl font-black uppercase tracking-widest text-white mb-2">Neural History Locked / မှတ်တမ်းကိုပိတ်ထားသည်</h2>
+        <p className="text-xs text-gray-500 max-w-sm mb-6 uppercase font-bold tracking-tighter">Please synchronize your identity to access past cognitive logs and forged assets.</p>
+        <button 
+          onClick={() => setActiveView('account')}
+          className="forge-btn text-forge-accent border-forge-accent/20 px-8 py-3 hover:bg-forge-accent hover:text-white"
+        >
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-4xl mx-auto w-full h-full flex flex-col p-4 sm:p-6 lg:p-10"
+    >
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-white">Neural History</h1>
+          <p className="text-[10px] text-forge-accent font-bold uppercase tracking-widest">Accessing Archived Memory Banks / ယခင်မှတ်တမ်းများ</p>
+        </div>
+        <div className="flex bg-forge-input p-1 rounded-sm border border-forge-border">
+          <button 
+            onClick={() => setActiveTab('chats')}
+            className={cn(
+              "px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-sm transition-all",
+              activeTab === 'chats' ? "bg-forge-accent text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+            )}
+          >
+            Chat Logs
+          </button>
+          <button 
+            onClick={() => setActiveTab('creations')}
+            className={cn(
+              "px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-sm transition-all",
+              activeTab === 'creations' ? "bg-forge-accent text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+            )}
+          >
+            Forge Output
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+        {loading ? (
+          <div className="h-full flex items-center justify-center font-mono text-[10px] text-forge-accent animate-pulse">
+            DECRYPTING_ARCHIVES...
+          </div>
+        ) : activeTab === 'chats' ? (
+          chats.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-700 font-mono italic text-xs">
+              NO NEURAL ECHOES DETECTED
+            </div>
+          ) : (
+            chats.map(msg => (
+              <div key={msg.id} className="forge-card p-4 border-l-2 border-l-forge-accent/40 hover:border-l-forge-accent transition-all">
+                <div className="flex justify-between items-center mb-2">
+                  <span className={cn(
+                    "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded",
+                    msg.role === 'user' ? "bg-blue-500/10 text-blue-400" : "bg-forge-accent/10 text-forge-accent"
+                  )}>
+                    {msg.role === 'user' ? 'Internal Prompt' : 'Neural Response'}
+                  </span>
+                  <span className="text-[9px] text-gray-600 font-mono">
+                    {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleString() : 'Recent'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed max-h-20 overflow-hidden line-clamp-3">{msg.text}</p>
+              </div>
+            ))
+          )
+        ) : (
+          creations.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-700 font-mono italic text-xs">
+              VOID_MANIFEST: NO ASSETS RECORDED
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-10">
+              {creations.map(item => (
+                <div key={item.id} className="forge-card p-5 group hover:border-forge-accent transition-all cursor-pointer group">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-forge-input border border-forge-border rounded flex items-center justify-center text-forge-accent group-hover:scale-110 transition-transform">
+                      {item.type === 'skin' ? <UserIcon size={20} /> : <Wand2 size={20} />}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] font-black text-forge-accent uppercase block">{item.type}</span>
+                      <span className="text-[8px] text-gray-600 font-mono">ID: {item.id.slice(0, 8)}</span>
+                    </div>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mb-2 group-hover:text-forge-accent transition-colors">{item.name}</h3>
+                  <div className="flex justify-between items-center pt-3 border-t border-forge-border mt-auto">
+                    <span className="text-[9px] text-gray-600">
+                      {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Syncing'}
+                    </span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Handle re-download or view logic
+                      }}
+                      className="text-[9px] font-bold text-white hover:text-forge-accent"
+                    >
+                      OPEN_MANIFEST
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -1430,9 +1673,9 @@ function AccountView({ user, customApiKey, setCustomApiKey }: { user: FirebaseUs
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="max-w-4xl mx-auto p-10 w-full overflow-y-auto"
+      className="max-w-4xl mx-auto p-4 sm:p-10 w-full overflow-y-auto"
     >
-      <div className="forge-card p-10 flex flex-col md:flex-row gap-10">
+      <div className="forge-card p-4 sm:p-10 flex flex-col md:flex-row gap-8 lg:gap-10">
         <div className="flex flex-col items-center gap-4">
           <div className="w-32 h-32 rounded bg-forge-input border-2 border-forge-accent p-1 shadow-2xl overflow-hidden">
             {user?.photoURL ? (
