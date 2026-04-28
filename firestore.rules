@@ -46,7 +46,7 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.type in ['mod', 'skin', 'addon', 'world'] &&
              data.name is string && data.name.size() <= 100 &&
-             data.content is string && data.content.size() <= 10000 &&
+             data.content is string && data.content.size() <= 50000 &&
              data.createdAt == request.time;
     }
 

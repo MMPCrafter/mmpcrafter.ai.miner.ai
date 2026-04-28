@@ -18,16 +18,15 @@ import {
   Download,
   CheckCircle2,
   AlertTriangle,
-  Mic,
   Paperclip,
   Image as ImageIcon,
-  StopCircle,
   Play,
   FileUp,
-  Github
+  Github,
+  History
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { minecraftChat, generateMinecraftContent } from './lib/gemini';
+import { minecraftChat, generateMinecraftContent, generateMinecraftSkinImage } from './lib/gemini';
 import { 
   auth, 
   signInWithGoogle, 
@@ -40,7 +39,7 @@ import {
   OperationType
 } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, deleteDoc, writeBatch, onSnapshot } from 'firebase/firestore';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -227,45 +226,6 @@ export default function App() {
   );
 }
 
-function PermissionGuide({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-forge-sidebar border border-forge-accent p-8 max-w-md w-full rounded shadow-2xl relative"
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
-          <X size={20} />
-        </button>
-        <h2 className="text-xl font-minecraft text-forge-accent mb-6 flex items-center gap-3">
-          <AlertTriangle size={24} /> ACCESS REQUIRED
-        </h2>
-        <div className="space-y-6 text-sm text-gray-300 leading-relaxed font-sans">
-          <div className="space-y-2">
-            <p className="font-bold text-white uppercase text-[10px] tracking-widest text-forge-accent">English Guide</p>
-            <p>
-              To use voice logs, you must grant microphone access. Look for the <span className="text-forge-accent">lock icon 🔒</span> or <span className="text-forge-accent">camera icon 📹</span> in your browser's address bar and set Microphone to <span className="text-green-500 font-bold underline">Allow</span>.
-            </p>
-          </div>
-          <div className="space-y-2 pt-4 border-t border-forge-border">
-            <p className="font-bold text-white uppercase text-[10px] tracking-widest text-forge-accent">မြန်မာဘာသာ လမ်းညွှန်</p>
-            <p>
-              အသံဖြင့် အသုံးပြုနိုင်ရန် မိုက်ခရိုဖုန်းကို ခွင့်ပြုပေးရပါမည်။ Browser ၏ အပေါ်ဘက် (address bar) ရှိ <span className="text-forge-accent text-lg">သော့ခတ်ပုံ 🔒</span> သို့မဟုတ် <span className="text-forge-accent text-lg">ကင်မရာပုံ 📹</span> ကိုနှိပ်ပြီး Microphone ကို <span className="text-green-500 font-bold underline">Allow (ခွင့်ပြုမည်)</span> ကို ရွေးချယ်ပေးပါ။
-            </p>
-          </div>
-        </div>
-        <button 
-          onClick={onClose}
-          className="mt-8 w-full bg-forge-accent text-white py-4 font-bold uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-[0.98] transition-all shadow-[0_0_15px_rgba(58,142,60,0.3)]"
-        >
-          SYNC_ACKNOWLEDGED / နားလည်ပါပြီ
-        </button>
-      </motion.div>
-    </div>
-  );
-}
-
 function NavButton({ active, onClick, icon, label, myanmarLabel, isOpen }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, myanmarLabel: string, isOpen: boolean }) {
   return (
     <button
@@ -294,12 +254,8 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load chat history from Firestore on mount
@@ -345,66 +301,6 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
     }
   }, [messages, isLoading]);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        handleSendVoice(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err: any) {
-      console.error("Error accessing microphone:", err);
-      setIsRecording(false);
-      
-      const isPermissionError = err.name === 'NotAllowedError' || err.message?.includes('denied') || err.message?.includes('Permission');
-      
-      if (isPermissionError) {
-        setShowGuide(true);
-      }
-
-      let errorMsg = "Microphone access denied.";
-      let myanmarMsg = "မိုက်ခရိုဖုန်း အသုံးပြုခွင့် ငြင်းပယ်ခံရသည်။";
-
-      if (isPermissionError) {
-        errorMsg = "Microphone permission was denied. Please click the camera/mic icon in your browser address bar to allow access.";
-        myanmarMsg = "မိုက်ခရိုဖုန်း အသုံးပြုခွင့်ကို ပိတ်ထားသည်။ Browser settings တွင် ခွင့်ပြုပေးပါ။";
-      } else if (err.name === 'NotFoundError') {
-        errorMsg = "No microphone found on this device.";
-        myanmarMsg = "မိုက်ခရိုဖုန်း ရှာမတွေ့ပါ။";
-      } else if (err.name === 'NotReadableError') {
-        errorMsg = "Microphone is already in use by another application.";
-        myanmarMsg = "မိုက်ခရိုဖုန်းကို အခြားနေရာတွင် အသုံးပြုနေသည်။";
-      }
-
-      setMessages(prev => [...prev, { 
-        id: Date.now().toString(), 
-        role: 'model', 
-        text: `⚠️ **System Error / စနစ် အမှား:**\n\n${errorMsg}\n\n${myanmarMsg}\n\nTo use voice messages, please ensure your microphone is connected and permissions are granted.\n\n[CLICK_HERE_FOR_HELP]` 
-      }]);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
   const saveMessage = async (role: 'user' | 'model', text: string) => {
     if (!user) return;
     try {
@@ -419,26 +315,7 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
     }
   };
 
-  const handleSendVoice = async (blob: Blob) => {
-    if (!user || isLoading) return;
-    setIsLoading(true);
-    
-    const userMsgId = Date.now().toString();
-    setMessages(prev => [...prev, { id: userMsgId, role: 'user', text: "🎤 *Sent a voice message*" }]);
-    saveMessage('user', "🎤 *Sent a voice message*");
 
-    try {
-      const response = await minecraftChat("User sent a voice message. Please acknowledge it and provide a friendly Minecraft tip.", []);
-      const botText = response || 'Neural link severed. Attempting reconnect...';
-      const botMsgId = (Date.now() + 1).toString();
-      setMessages(prev => [...prev, { id: botMsgId, role: 'model', text: botText }]);
-      saveMessage('model', botText);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -505,7 +382,6 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
       exit={{ opacity: 0, x: 20 }}
       className="flex h-full p-6 gap-6 max-w-[1400px] mx-auto w-full"
     >
-      {showGuide && <PermissionGuide onClose={() => setShowGuide(false)} />}
       <div className="flex-[1.2] forge-card flex flex-col relative">
         <div className="p-4 border-b border-forge-border flex items-center gap-3 bg-forge-sidebar/50">
           <div className="w-3 h-3 bg-forge-accent"></div>
@@ -577,21 +453,6 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
               >
                 <Paperclip size={18} />
               </button>
-              <button 
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onMouseLeave={stopRecording}
-                className={cn(
-                  "p-2 transition-colors relative",
-                  isRecording ? "text-red-500 animate-pulse" : "text-gray-500 hover:text-forge-accent"
-                )}
-                title="Hold to record neural log"
-              >
-                {isRecording ? <StopCircle size={18} /> : <Mic size={18} />}
-                {isRecording && (
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[8px] px-1 rounded animate-bounce">REC</span>
-                )}
-              </button>
             </div>
             
             <input 
@@ -599,13 +460,12 @@ function ChatView({ user }: { user: FirebaseUser | null }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={isRecording ? "Listening..." : "Query the forge..."}
+              placeholder="Query the forge..."
               className="flex-1 bg-forge-input border border-forge-border py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-forge-accent transition-all text-forge-text-primary placeholder:text-gray-600"
-              disabled={isRecording}
             />
             <button 
               onClick={handleSend}
-              disabled={isLoading || isRecording}
+              disabled={isLoading}
               className="absolute right-2 px-4 py-1.5 bg-forge-accent text-white text-[10px] font-bold uppercase rounded-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-30"
             >
               SEND
@@ -678,25 +538,89 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
   const [type, setType] = useState<'addon' | 'skin' | 'world' | 'mod'>('addon');
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
+  const [skinImage, setSkinImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [creations, setCreations] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const generatorFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'creations'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCreations(history);
+    }, (err) => {
+      console.error("Creations snapshot error:", err);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const saveCreation = async (creationType: string, content: string, nameOverride?: string) => {
+    if (!user) return;
+    try {
+      const creationName = nameOverride || content.split('\n')[0].replace('#', '').trim() || `New ${creationType}`;
+      await addDoc(collection(db, 'creations'), {
+        userId: user.uid,
+        type: creationType,
+        name: creationName,
+        content: content,
+        createdAt: serverTimestamp(),
+        isPublic: true
+      });
+      setSaveStatus('success');
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim() || isLoading) return;
     setIsLoading(true);
     setSaveStatus('idle');
+    setSkinImage(null);
     try {
       const fullPrompt = referenceFile ? `[Reference File: ${referenceFile.name}] ${prompt}` : prompt;
       const res = await generateMinecraftContent(type, fullPrompt);
-      setResult(res || null);
+      if (res) {
+        setResult(res);
+        await saveCreation(type, res);
+      }
     } catch (err) {
       console.error(err);
       setResult("### Critical Failure\nGeneration cycle interrupted by server timeout.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadFromHistory = (item: any) => {
+    setResult(item.content);
+    setType(item.type);
+    setSkinImage(null); // Clear skin image when loading old one for now to avoid confusion
+    setSaveStatus('success');
+  };
+
+  const handleGenerateSkinImage = async () => {
+    if (!result || type !== 'skin' || isGeneratingImage) return;
+    setIsGeneratingImage(true);
+    try {
+      const img = await generateMinecraftSkinImage(prompt);
+      setSkinImage(img);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsGeneratingImage(false);
     }
   };
 
@@ -734,7 +658,13 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `minecraft_${type}_idea.md`;
+    
+    let extension = '.md';
+    if (type === 'addon' || type === 'mod') extension = '.mcpack';
+    if (type === 'world') extension = '.mcworld';
+    if (type === 'skin') extension = '.txt';
+
+    a.download = `miner_forge_${type}_${Date.now()}${extension}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -744,11 +674,54 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="flex flex-col h-full p-6 max-w-5xl mx-auto w-full overflow-y-auto"
+      className="flex flex-col lg:flex-row h-full max-w-[1600px] mx-auto w-full overflow-hidden"
     >
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1 flex flex-col gap-6">
-          <div className="forge-card flex flex-col">
+      {/* History Sidebar */}
+      <aside className={cn(
+        "bg-forge-sidebar/30 border-r border-forge-border transition-all duration-300 flex flex-col",
+        showHistory ? "w-72" : "w-0 overflow-hidden"
+      )}>
+        <div className="p-4 border-b border-forge-border flex justify-between items-center bg-black/20">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-forge-accent">Creation_Log / မှတ်တမ်း</h3>
+          <button onClick={() => setShowHistory(false)}><X size={14} className="text-gray-500" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {creations.length === 0 ? (
+            <div className="text-[10px] text-gray-700 font-mono italic text-center mt-10">NO ENTRIES FOUND</div>
+          ) : (
+            creations.map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => loadFromHistory(item)}
+                className="w-full text-left p-3 border border-forge-border bg-forge-input/20 hover:border-forge-accent group transition-all rounded-sm"
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className="text-[9px] font-bold text-forge-accent uppercase tracking-tighter">{item.type}</span>
+                  <span className="text-[8px] text-gray-600 font-mono">
+                    {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Pending'}
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 truncate group-hover:text-white transition-colors">{item.name}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto relative">
+        {!showHistory && (
+          <button 
+            onClick={() => setShowHistory(true)}
+            className="absolute left-6 top-6 z-10 p-2 bg-forge-sidebar border border-forge-border rounded-full text-forge-accent hover:scale-110 transition-all shadow-xl"
+            title="Show History"
+          >
+            <History size={20} />
+          </button>
+        )}
+
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex-1 flex flex-col gap-6">
+            <div className="forge-card flex flex-col">
             <div className="p-4 border-b border-forge-border bg-forge-sidebar/50 flex justify-between items-center">
               <h2 className="text-xs font-bold uppercase tracking-widest text-forge-text-secondary">Core Parameters / အခြေခံသတ်မှတ်ချက်များ</h2>
               <span className="text-[10px] text-forge-accent font-mono">STEP_01</span>
@@ -855,8 +828,38 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
               !result && "flex items-center justify-center text-gray-700 font-mono text-xs italic"
             )}>
               {result ? (
-                <div className="markdown-body">
-                  <ReactMarkdown>{result}</ReactMarkdown>
+                <div className="flex flex-col gap-6">
+                  {type === 'skin' && (
+                    <div className="flex flex-col items-center gap-4 p-4 bg-forge-sidebar/30 border border-forge-border rounded">
+                      {skinImage ? (
+                        <div className="relative group">
+                          <img 
+                            src={skinImage} 
+                            alt="Minecraft Skin Preview" 
+                            className="w-full max-w-[300px] h-auto rounded border-2 border-forge-accent/20 shadow-2xl"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 p-2 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex justify-center">
+                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Rendered by Gemini 2.0</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-[300px] aspect-square bg-forge-input border border-dashed border-forge-border rounded flex flex-col items-center justify-center gap-3 text-gray-600">
+                          <ImageIcon size={32} />
+                          <button 
+                            onClick={handleGenerateSkinImage}
+                            disabled={isGeneratingImage}
+                            className="px-4 py-2 bg-forge-accent/10 border border-forge-accent/30 text-forge-accent text-[10px] font-bold uppercase hover:bg-forge-accent/20 transition-all disabled:opacity-30"
+                          >
+                            {isGeneratingImage ? "SYNTHESIZING..." : "Generate 3D Visual / ပုံထုတ်မည်"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="markdown-body">
+                    <ReactMarkdown>{result}</ReactMarkdown>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-4">
@@ -880,8 +883,9 @@ function GeneratorView({ user }: { user: FirebaseUser | null }) {
           </div>
         </div>
       </div>
-    </motion.div>
-  );
+    </div>
+  </motion.div>
+);
 }
 
 function HubView() {
@@ -1070,12 +1074,16 @@ function LoginView() {
                 <div className="text-[11px] leading-relaxed text-gray-400">
                   <span className="text-white font-bold">Account Opening:</span> Login with Google, Microsoft, or GitHub. No complex forms required.
                   <br/><br/>
+                  <span className="text-orange-500 font-bold">VERCEL/GITHUB USERS:</span> Ensure your domain is added to <span className="text-white">Firebase {">"} Authentication {">"} Settings {">"} Authorized Domains</span>.
+                  <br/><br/>
                   <span className="text-forge-accent font-bold italic">PRO TIP:</span> If login fails inside the GitHub or Vercel app browser, please open this link in a standard browser like <span className="text-white">Chrome</span> or <span className="text-white">Safari</span>.
                 </div>
              </div>
              <div className="flex items-start gap-3 border-t border-forge-border pt-3">
                 <div className="text-[11px] leading-relaxed text-gray-400">
                   <span className="text-white font-bold">အကောင့်ဖွင့်နည်း:</span> Google, Microsoft (သို့မဟုတ်) GitHub အကောင့်တစ်ခုခုဖြင့် တိုက်ရိုက်ဝင်နိုင်ပါသည်။
+                  <br/><br/>
+                  <span className="text-orange-500 font-bold">သတိပြုရန်:</span> Vercel သို့မဟုတ် GitHub link ဖြင့်သုံးနေပါက Firebase Console ရှိ <span className="text-white">Authorized Domains</span> စာရင်းထဲတွင် သင့် link ကို ထည့်ထားရပါမည်။
                   <br/><br/>
                   <span className="text-forge-accent font-bold italic">အကြံပြုချက်:</span> အကယ်၍ GitHub (သို့မဟုတ်) Vercel app browser များအတွင်း အကောင့်ဝင်မရပါက Chrome သို့မဟုတ် Safari browser တွင် ဖွင့်၍ အသုံးပြုပါ။
                 </div>
@@ -1092,17 +1100,6 @@ function LoginView() {
 }
 
 function SystemMonitor() {
-  const [micStatus, setMicStatus] = useState<PermissionState | 'unknown'>('unknown');
-  
-  useEffect(() => {
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'microphone' as PermissionName }).then(status => {
-        setMicStatus(status.state);
-        status.onchange = () => setMicStatus(status.state);
-      }).catch(() => setMicStatus('unknown'));
-    }
-  }, []);
-
   return (
     <section className="forge-card p-6 bg-forge-sidebar/20 border-forge-border">
       <h2 className="text-xs font-black uppercase tracking-[0.2em] text-forge-text-secondary mb-4 flex items-center gap-2">
@@ -1110,28 +1107,18 @@ function SystemMonitor() {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="p-3 bg-forge-input border border-forge-border rounded flex items-center justify-between">
-           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Microphone / မိုက်</span>
-           <span className={cn(
-             "text-[9px] font-mono font-bold px-2 py-0.5 rounded",
-             micStatus === 'granted' ? "bg-green-500/20 text-green-500" : 
-             micStatus === 'denied' ? "bg-red-500/20 text-red-500" : "bg-orange-500/20 text-orange-500"
-           )}>
-             {micStatus.toUpperCase()}
-           </span>
-        </div>
-        <div className="p-3 bg-forge-input border border-forge-border rounded flex items-center justify-between">
            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Offline Manifest</span>
            <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-green-500/20 text-green-500">
              ENABLED
            </span>
         </div>
+        <div className="p-3 bg-forge-input border border-forge-border rounded flex items-center justify-between">
+           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Real-time Stream</span>
+           <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-500">
+             ACTIVE
+           </span>
+        </div>
       </div>
-      {micStatus === 'denied' && (
-        <p className="mt-3 text-[10px] text-orange-500 italic leading-relaxed">
-          ⚠️ Mic access is blocked. Click the lock icon in your browser address bar to reset permissions.<br/>
-          မိုက်ခရိုဖုန်းကို ပိတ်ထားသည်။ Browser ၏ Address bar ရှိ သော့ပုံကိုနှိပ်၍ ခွင့်ပြုချက် ပြန်ပေးပါ။
-        </p>
-      )}
     </section>
   );
 }
@@ -1155,6 +1142,26 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
     };
     fetchProfile();
   }, [user]);
+
+  const clearCreationLogs = async () => {
+    if (!user || clearing) return;
+    if (!confirm("Are you sure you want to delete all generated creations history? This cannot be undone.")) return;
+    
+    setClearing(true);
+    try {
+      const q = query(collection(db, 'creations'), where('userId', '==', user.uid));
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      snapshot.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      alert("Creation logs purged successfully.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to purge creations history.");
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const clearChatLogs = async () => {
     if (!user || clearing) return;
@@ -1244,10 +1251,10 @@ function AccountView({ user }: { user: FirebaseUser | null }) {
             </div>
           </section>
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-forge-border">
-            <button onClick={clearChatLogs} className="forge-btn text-orange-500 border-orange-500/30 hover:bg-orange-500/10">Purge Logs / မှတ်တမ်းဖျက်ရန်</button>
-            <button onClick={() => logout()} className="forge-btn text-red-500 border-red-500/30 hover:bg-red-500/10">Terminate Session / ထွက်ရန်</button>
-            <button className="forge-btn-primary px-8">Update Profiles</button>
+          <div className="flex flex-wrap justify-end gap-3 pt-6 border-t border-forge-border">
+            <button onClick={clearCreationLogs} className="forge-btn text-forge-accent border-forge-accent/30 hover:bg-forge-accent/10 whitespace-nowrap">Purge Creations / ဖန်တီးမှုများဖျက်ရန်</button>
+            <button onClick={clearChatLogs} className="forge-btn text-orange-500 border-orange-500/30 hover:bg-orange-500/10 whitespace-nowrap">Purge Chat Logs / မှတ်တမ်းဖျက်ရန်</button>
+            <button onClick={() => logout()} className="forge-btn text-red-500 border-red-500/30 hover:bg-red-500/10 whitespace-nowrap">Terminate Session / ထွက်ရန်</button>
           </div>
         </div>
       </div>

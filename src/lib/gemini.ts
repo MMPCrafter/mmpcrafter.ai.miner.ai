@@ -31,13 +31,22 @@ export const generateMinecraftContent = async (type: 'addon' | 'skin' | 'world' 
   const model = "gemini-3-flash-preview";
   const systemInstruction = `You are a professional Minecraft Mod and Content Generator.
   The user wants an idea or template for a ${type}.
-  Provide:
-  1. A creative Name.
-  2. A detailed Description of the ${type}.
-  3. Key features or components.
-  4. (If applicable) Technical hints for creators (e.g., entity definitions for addons, color palettes for skins, biome settings for worlds).
   
-  Output in structured Markdown.`;
+  If type is 'skin':
+  - Provide a name and a detailed design description.
+  - Suggest a color hex palette.
+  - DO NOT try to generate the actual skin PNG here, just description.
+  
+  If type is 'addon' or 'mod':
+  - Provide a structure for a .mcpack or .mcaddon.
+  - List items, blocks, or entities.
+  - Provide JSON snippets for behavior/resource packs.
+  
+  If type is 'world':
+  - Provide a name and biome/seed details for a .mcworld.
+  - List key landmarks.
+  
+  Output in structured Markdown in both English and Myanmar.`;
 
   const response = await ai.models.generateContent({
     model,
@@ -48,4 +57,34 @@ export const generateMinecraftContent = async (type: 'addon' | 'skin' | 'world' 
   });
 
   return response.text;
+};
+
+export const generateMinecraftSkinImage = async (prompt: string) => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [
+          {
+            text: `A high-quality 3D render of a Minecraft character skin based on this description: ${prompt}. The character should be in a dynamic pose, centered, with a clear view of the design details. Professional lighting, 4k, photorealistic style but keeping the blocky Minecraft aesthetic.`,
+          },
+        ],
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: "1:1"
+        }
+      },
+    });
+
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData) {
+        return `data:image/png;base64,${part.inlineData.data}`;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error("Image generation failed:", err);
+    return null;
+  }
 };
