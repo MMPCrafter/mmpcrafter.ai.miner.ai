@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['displayName', 'email', 'createdAt']) &&
+             data.keys().size() >= 3 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidCreation(data) {
+      return data.keys().hasAll(['userId', 'type', 'name', 'content', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['mod', 'skin', 'addon', 'world'] &&
+             data.name is string && data.name.size() <= 100 &&
+             data.content is string && data.content.size() <= 10000 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['userId', 'role', 'text', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() <= 5000 &&
+             data.createdAt == request.time;
+    }
+
+    // --- Collection Routes ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if false; // Users shouldn't be listable by anyone
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && 
+                      incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'settings']) &&
+                      (incoming().displayName is string && incoming().displayName.size() <= 100);
+    }
+
+    match /chats/{messageId} {
+      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidChatMessage(incoming());
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /creations/{creationId} {
+      allow get: if isSignedIn() && (resource.data.isPublic == true || isOwner(resource.data.userId));
+      allow list: if isSignedIn() && (resource.data.isPublic == true || isOwner(resource.data.userId));
+      allow create: if isSignedIn() && isValidCreation(incoming());
+      allow update: if isOwner(existing().userId) && 
+                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'content', 'isPublic']) &&
+                      (incoming().name is string && incoming().name.size() <= 100);
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}

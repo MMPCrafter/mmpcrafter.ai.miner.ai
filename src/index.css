@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Inter:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-forge-bg: #121212;
+  --color-forge-sidebar: #1A1A1A;
+  --color-forge-header: #181818;
+  --color-forge-accent: #388E3C;
+  --color-forge-border: #333333;
+  --color-forge-input: #252525;
+  --color-forge-text-primary: #E0E0E0;
+  --color-forge-text-secondary: #AAAAAA;
+}
+
+@layer base {
+  body {
+    @apply bg-forge-bg text-forge-text-primary font-sans;
+  }
+}
+
+.forge-card {
+  @apply bg-forge-sidebar border border-forge-border rounded-sm shadow-2xl overflow-hidden;
+}
+
+.forge-btn {
+  @apply px-4 py-2 bg-forge-input border border-forge-border text-xs font-bold uppercase tracking-widest hover:bg-[#2a2a2a] transition-all active:scale-95 disabled:opacity-50;
+}
+
+.forge-btn-primary {
+  @apply px-4 py-2 bg-forge-accent text-white text-[10px] font-bold uppercase tracking-widest rounded-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-50;
+}
+
+.markdown-body {
+  @apply space-y-2;
+}
+.markdown-body h1, .markdown-body h2 { @apply text-lg font-bold text-forge-text-secondary uppercase tracking-tight; }
+.markdown-body ul { @apply list-disc list-inside text-sm text-gray-300; }
+.markdown-body p { @apply leading-relaxed text-sm; }
+

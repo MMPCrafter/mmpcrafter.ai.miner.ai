@@ -1,0 +1,6 @@
+{
+  "name": "Miner AI",
+  "description": "An AI-powered companion and creator for Minecraft players.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": []
+}
