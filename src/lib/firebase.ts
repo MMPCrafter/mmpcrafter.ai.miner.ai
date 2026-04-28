@@ -6,7 +6,8 @@ import {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
+  GithubAuthProvider
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -41,6 +42,7 @@ if (typeof window !== 'undefined') {
 // Auth Providers
 export const googleProvider = new GoogleAuthProvider();
 export const microsoftProvider = new OAuthProvider('microsoft.com');
+export const githubProvider = new GithubAuthProvider();
 
 // Test connection CRITICAL according to instructions
 async function testConnection() {
@@ -57,6 +59,7 @@ testConnection();
 // Helpers
 export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
 export const signInWithMicrosoft = () => signInWithPopup(auth, microsoftProvider);
+export const signInWithGithub = () => signInWithPopup(auth, githubProvider);
 export const logout = () => signOut(auth);
 
 export enum OperationType {

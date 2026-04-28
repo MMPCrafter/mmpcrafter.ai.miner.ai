@@ -23,7 +23,8 @@ import {
   Image as ImageIcon,
   StopCircle,
   Play,
-  FileUp
+  FileUp,
+  Github
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { minecraftChat, generateMinecraftContent } from './lib/gemini';
@@ -31,6 +32,7 @@ import {
   auth, 
   signInWithGoogle, 
   signInWithMicrosoft, 
+  signInWithGithub,
   logout, 
   syncUserProfile, 
   db,
@@ -956,71 +958,129 @@ function HubView() {
 }
 
 function LoginView() {
-  const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSocialLogin = async (provider: 'google' | 'microsoft') => {
+  const handleSocialLogin = async (provider: 'google' | 'microsoft' | 'github') => {
+    setIsSubmitting(true);
+    setError(null);
     try {
       if (provider === 'google') await signInWithGoogle();
-      else await signInWithMicrosoft();
-    } catch (err) {
+      else if (provider === 'microsoft') await signInWithMicrosoft();
+      else await signInWithGithub();
+    } catch (err: any) {
       console.error(err);
+      if (err.code === 'auth/popup-blocked') {
+        setError("Popup blocked! Please allow popups for this site. / Popup ကို ပိတ်ထားသည်။ ခွင့်ပြုပေးပါ။");
+      } else if (err.code === 'auth/cancelled-by-user') {
+        setError("Login cancelled. / အကောင့်ဝင်ခြင်းကို ဖျက်သိမ်းလိုက်သည်။");
+      } else {
+        setError("Connection failed. Please try again. / ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်ကြိုးစားကြည့်ပါ။");
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="h-screen w-full bg-forge-bg flex items-center justify-center p-4">
-      <div className="forge-card w-full max-w-md p-8 flex flex-col items-center gap-8">
+      <div className="forge-card w-full max-w-md p-8 flex flex-col items-center gap-6">
         <div className="w-20 h-20 bg-forge-accent rounded-sm flex items-center justify-center shadow-lg border border-white/10">
           <Pickaxe className="text-white" size={48} />
         </div>
         
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-minecraft tracking-tight">MINER <span className="text-forge-accent">AI</span></h1>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI</p>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Connect to Minecraft AI Forge</p>
           <p className="text-[10px] text-forge-accent/70 font-bold uppercase tracking-widest">မြန်မာဘာသာဖြင့် အသုံးပြုနိုင်သည်</p>
         </div>
 
-        <div className="w-full space-y-3">
-          <button 
-            onClick={() => handleSocialLogin('google')}
-            className="forge-btn w-full flex items-center justify-center gap-3 py-4 hover:border-forge-accent text-sm"
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs font-medium text-center"
           >
-            <Globe size={18} className="text-blue-500" />
-            Sign in with Google
-          </button>
-          
-          <button 
-            onClick={() => handleSocialLogin('microsoft')}
-            className="forge-btn w-full flex items-center justify-center gap-3 py-4 hover:border-forge-accent text-sm"
-          >
-            <Pickaxe size={18} className="text-orange-500" />
-            Sign in with Microsoft (Minecraft)
-          </button>
+            <AlertTriangle className="inline-block mr-2" size={14} />
+            {error}
+          </motion.div>
+        )}
+
+        <div className="w-full space-y-4">
+          <div className="space-y-1">
+            <p className="text-[10px] text-gray-400 font-bold uppercase text-center mb-4 leading-relaxed">
+              Sign in with your social account to start creating.<br/>
+              အကောင့်ဖွင့်ရန် အောက်ပါ ခလုတ်များကို နှိပ်ပါ။
+            </p>
+            <button 
+              onClick={() => handleSocialLogin('google')}
+              disabled={isSubmitting}
+              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <Globe size={20} className="text-blue-500" />
+                <div className="text-left">
+                  <div className="font-bold text-white leading-none">Google Account</div>
+                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Google ဖြင့် အကောင့်ဝင်မည်</div>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+            </button>
+            
+            <button 
+              onClick={() => handleSocialLogin('microsoft')}
+              disabled={isSubmitting}
+              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <Pickaxe size={20} className="text-orange-500" />
+                <div className="text-left">
+                  <div className="font-bold text-white leading-none">Microsoft Account</div>
+                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">Microsoft ဖြင့် အကောင့်ဝင်မည်</div>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+            </button>
+
+            <button 
+              onClick={() => handleSocialLogin('github')}
+              disabled={isSubmitting}
+              className="forge-btn w-full flex items-center justify-between px-6 py-4 hover:border-forge-accent text-sm group transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <Github size={20} className="text-white" />
+                <div className="text-left">
+                  <div className="font-bold text-white leading-none">GitHub Account</div>
+                  <div className="text-[9px] text-gray-500 uppercase font-bold mt-1">GitHub ဖြင့် အကောင့်ဝင်မည်</div>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-gray-700 group-hover:text-forge-accent" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-4 py-2">
-            <div className="h-[1px] flex-1 bg-forge-border" />
-            <span className="text-[10px] text-gray-600 font-bold uppercase">Or use Email</span>
-            <div className="h-[1px] flex-1 bg-forge-border" />
+            <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
+            <span className="text-[10px] text-gray-700 font-bold uppercase">System Info</span>
+            <div className="h-[1px] flex-1 bg-forge-border opacity-30" />
           </div>
 
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-            <input 
-              type="email" 
-              placeholder="vessel@neural-link.net"
-              className="w-full bg-forge-input border border-forge-border py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-forge-accent transition-all text-forge-text-primary"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+          <div className="p-4 bg-forge-sidebar/30 border border-forge-border rounded space-y-3">
+             <div className="flex items-start gap-3">
+                <Info size={16} className="text-forge-accent mt-0.5 shrink-0" />
+                <div className="text-[11px] leading-relaxed text-gray-400">
+                  <span className="text-white font-bold">Account Opening:</span> Login with Google, Microsoft, or GitHub. No complex forms required.
+                  <br/><br/>
+                  <span className="text-forge-accent font-bold italic">PRO TIP:</span> If login fails inside the GitHub or Vercel app browser, please open this link in a standard browser like <span className="text-white">Chrome</span> or <span className="text-white">Safari</span>.
+                </div>
+             </div>
+             <div className="flex items-start gap-3 border-t border-forge-border pt-3">
+                <div className="text-[11px] leading-relaxed text-gray-400">
+                  <span className="text-white font-bold">အကောင့်ဖွင့်နည်း:</span> Google, Microsoft (သို့မဟုတ်) GitHub အကောင့်တစ်ခုခုဖြင့် တိုက်ရိုက်ဝင်နိုင်ပါသည်။
+                  <br/><br/>
+                  <span className="text-forge-accent font-bold italic">အကြံပြုချက်:</span> အကယ်၍ GitHub (သို့မဟုတ်) Vercel app browser များအတွင်း အကောင့်ဝင်မရပါက Chrome သို့မဟုတ် Safari browser တွင် ဖွင့်၍ အသုံးပြုပါ။
+                </div>
+             </div>
           </div>
-          
-          <button 
-            disabled={!email.includes('@') || isSubmitting}
-            className="forge-btn-primary w-full py-4 text-xs font-bold uppercase tracking-widest disabled:opacity-30"
-          >
-            Link Email (Coming Soon)
-          </button>
         </div>
 
         <p className="text-[10px] text-gray-700 font-mono text-center max-w-[280px]">
